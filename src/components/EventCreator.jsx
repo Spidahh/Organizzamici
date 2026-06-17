@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { CITIES } from "../utils/geoData";
+import { toast } from "../ui";
 
 export default function EventCreator({ step, initialData, onNext, onPrev }) {
   const [eventType, setEventType] = useState(initialData?.eventType || "weekend");
@@ -78,11 +79,10 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
 
   const handleNextStep = (e) => {
     e.preventDefault();
-    console.log("SUBMITTING EVENT CREATOR: step=" + step + ", dateMode=" + dateMode + ", fixedDate=" + fixedDate + ", selectedDates=" + JSON.stringify(selectedDates));
     if (step === 1) {
       if (dateMode === "fissa") {
         if (!fixedDate) {
-          alert("Seleziona la data dell'evento!");
+          toast.error("Seleziona la data dell'evento!");
           return;
         }
         onNext({ 
@@ -111,7 +111,7 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
       }
     } else if (step === 2) {
       if (selectedDates.length === 0) {
-        alert("Seleziona almeno una data sul calendario!");
+        toast.error("Seleziona almeno una data sul calendario!");
         return;
       }
       onNext({ selectedDates, participants: initialData?.participants || [] });

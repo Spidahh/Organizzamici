@@ -6,6 +6,7 @@ import AvailabilitySelector from "./components/AvailabilitySelector";
 import ResultsOptimizer from "./components/ResultsOptimizer";
 import Auth from "./components/Auth";
 import { optimizeDates } from "./utils/schedulerAlgorithm";
+import { toast, confirmDialog, celebrate, Skeleton } from "./ui";
 
 // Shared date formatters
 const formatDateShort = (dateStr) => {
@@ -162,7 +163,39 @@ function AppContent() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    toast.info("A presto! 👋");
     navigate("/");
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    const ok = await confirmDialog({
+      title: "Eliminare l'evento?",
+      message: "L'evento e tutte le risposte degli amici verranno rimossi definitivamente. L'azione non è reversibile.",
+      confirmText: "Sì, elimina",
+      danger: true,
+    });
+    if (!ok) return;
+
+    if (supabase.isMock) {
+      try {
+        const events = JSON.parse(localStorage.getItem("mock_db_events") || "[]").filter((e) => e.id !== eventId);
+        localStorage.setItem("mock_db_events", JSON.stringify(events));
+        const responses = JSON.parse(localStorage.getItem("mock_db_responses") || "[]").filter((r) => r.event_id !== eventId);
+        localStorage.setItem("mock_db_responses", JSON.stringify(responses));
+        toast.success("Evento eliminato");
+        fetchUserEvents(user.id);
+      } catch (e) {
+        toast.error("Errore durante l'eliminazione");
+      }
+      return;
+    }
+
+    const { error } = await supabase.from("events").delete().eq("id", eventId);
+    if (error) toast.error("Errore eliminazione: " + error.message);
+    else {
+      toast.success("Evento eliminato");
+      fetchUserEvents(user.id);
+    }
   };
 
   return (
@@ -197,7 +230,7 @@ function AppContent() {
       {/* Area Contenuto con Router */}
       <main style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <Routes>
-          <Route path="/" element={<Home user={user} myEvents={myEvents} myParticipations={myParticipations} loading={loadingUserEvents} navigate={navigate} />} />
+          <Route path="/" element={<Home user={user} myEvents={myEvents} myParticipations={myParticipations} loading={loadingUserEvents} navigate={navigate} onDeleteEvent={handleDeleteEvent} />} />
           <Route path="/login" element={<LoginPage user={user} navigate={navigate} />} />
           <Route path="/create" element={<CreateEvent user={user} navigate={navigate} />} />
           <Route path="/event/:id" element={<EventDashboard user={user} navigate={navigate} />} />
@@ -214,7 +247,7 @@ function AppContent() {
 // ----------------------------------------------------
 // PAGINA 1: LANDING & DASHBOARD UTENTE (HOME)
 // ----------------------------------------------------
-function Home({ user, myEvents, myParticipations, loading, navigate }) {
+function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEvent }) {
   return (
     <div style={{ width: "100%" }}>
       {user ? (
@@ -231,7 +264,15 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
           </div>
 
           {loading ? (
-            <div style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>⏳ Caricamento eventi in corso...</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="glass-panel" style={{ padding: "16px", animationDelay: `${i * 80}ms` }}>
+                  <Skeleton width="35%" height={10} />
+                  <Skeleton width="70%" height={18} style={{ marginTop: 14 }} />
+                  <Skeleton width="50%" height={12} style={{ marginTop: 10 }} />
+                </div>
+              ))}
+            </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               {/* Eventi creati come organizzatore */}
@@ -246,24 +287,34 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
                     {myEvents.map(e => (
-                      <Link to={`/event/${e.id}`} key={e.id} className="result-card" style={{ padding: "16px", borderRadius: "var(--radius-md)", background: "var(--bg-card)", border: "1px solid var(--border-color)", textDecoration: "none", display: "block" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "99px", background: "var(--color-preferred-bg)", color: "var(--color-preferred)", fontWeight: "700" }}>
-                            {(e.event_type || e.eventType || "altro").toUpperCase()}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                            {(e.selected_dates || e.selectedDates || []).length === 1 ? (
-                              `📅 ${formatDateShort((e.selected_dates || e.selectedDates)[0])}`
-                            ) : (
-                              `${(e.selected_dates || e.selectedDates || []).length} date prop.`
-                            )}
-                          </span>
-                        </div>
-                        <h4 style={{ margin: "10px 0 4px 0", fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{e.title}</h4>
-                        <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          📍 {e.custom_location || e.customLocation || e.location}
-                        </p>
-                      </Link>
+                      <div key={e.id} style={{ position: "relative" }}>
+                        <button
+                          onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); onDeleteEvent && onDeleteEvent(e.id); }}
+                          title="Elimina evento"
+                          className="btn btn-danger"
+                          style={{ position: "absolute", top: "10px", right: "10px", padding: "4px 9px", fontSize: "12px", zIndex: 2, lineHeight: 1 }}
+                        >
+                          🗑️
+                        </button>
+                        <Link to={`/event/${e.id}`} className="result-card" style={{ padding: "16px", paddingRight: "48px", borderRadius: "var(--radius-md)", background: "var(--bg-inset)", border: "1px solid var(--border-color)", textDecoration: "none", display: "block" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <span className="badge chip-gradient" style={{ fontSize: "10px" }}>
+                              {(e.event_type || e.eventType || "altro").toUpperCase()}
+                            </span>
+                            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                              {(e.selected_dates || e.selectedDates || []).length === 1 ? (
+                                `📅 ${formatDateShort((e.selected_dates || e.selectedDates)[0])}`
+                              ) : (
+                                `${(e.selected_dates || e.selectedDates || []).length} date prop.`
+                              )}
+                            </span>
+                          </div>
+                          <h4 style={{ margin: "10px 0 4px 0", fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{e.title}</h4>
+                          <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            📍 {e.custom_location || e.customLocation || e.location}
+                          </p>
+                        </Link>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -308,40 +359,57 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
         </div>
       ) : (
         // HERO LANDING PER UTENTE NON LOGGATO
-        <div className="glass-panel" style={{ padding: "50px 40px", maxWidth: "650px", margin: "0 auto", textAlign: "center" }}>
-          <div style={{ fontSize: "56px", marginBottom: "20px" }}>🏡</div>
-          <h1 style={{ fontSize: "36px", marginBottom: "12px", letterSpacing: "-0.5px", fontWeight: "800", color: "var(--text-primary)" }}>
-            Organizza incontri tra amici senza stress
-          </h1>
-          <p className="subtitle" style={{ fontSize: "15px", marginBottom: "36px", color: "var(--text-secondary)", maxWidth: "550px", margin: "0 auto 36px" }}>
-            Crea il tuo evento e condividi il link. I tuoi amici partecipano e votano in tempo reale da qualsiasi dispositivo. Trova istantaneamente la data ottimale incrociando viaggi, impegni e turni di lavoro.
-          </p>
-
-          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => navigate("/login?redirect=/create")} className="btn btn-primary" style={{ padding: "12px 30px", fontSize: "15px" }}>
-              Crea il tuo Evento ➔
-            </button>
-            <button onClick={() => navigate("/event/demo")} className="btn btn-secondary" style={{ padding: "12px 24px", fontSize: "15px" }}>
-              🛠️ Prova Scenario Demo Locale
-            </button>
+        <div style={{ width: "100%" }}>
+          {/* HERO */}
+          <div style={{ textAlign: "center", maxWidth: "760px", margin: "0 auto", padding: "16px 0 8px" }}>
+            <div className="float-anim" style={{ fontSize: "66px", marginBottom: "16px", filter: "drop-shadow(0 14px 34px rgba(217,70,239,0.55))" }}>🥂</div>
+            <span className="badge chip-gradient" style={{ fontSize: "12px" }}>✨ Basta mille chat di gruppo per decidere una data</span>
+            <h1 style={{ fontSize: "clamp(32px, 6.2vw, 56px)", lineHeight: 1.05, margin: "18px 0 16px" }}>
+              Organizza ritrovi tra amici<br /><span className="text-gradient">senza stress</span>
+            </h1>
+            <p style={{ fontSize: "17px", color: "var(--text-secondary)", maxWidth: "560px", margin: "0 auto 30px" }}>
+              Crea l'evento e condividi un link. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando <strong style={{ color: "var(--text-primary)" }}>viaggi, impegni e turni di lavoro</strong>.
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+              <button onClick={() => navigate("/login?redirect=/create")} className="btn btn-primary" style={{ padding: "14px 32px", fontSize: "16px" }}>
+                Crea il tuo Evento ➔
+              </button>
+              <button onClick={() => navigate("/event/demo")} className="btn btn-secondary" style={{ padding: "14px 26px", fontSize: "16px" }}>
+                👀 Prova la Demo
+              </button>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "16px" }}>
+              Gratis · Nessuna carta richiesta · Funziona su ogni telefono
+            </p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "48px", textAlign: "left", borderTop: "1px solid var(--border-color)", paddingTop: "30px" }}>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🔑 Profili Sicuri</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Registrati gratis con la tua email per proteggere i tuoi dati ed evitare sostituzioni di persona.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>⚡ Realtime Sincronizzato</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Vedi istantaneamente i voti, i commenti e i link utili aggiunti dagli altri partecipanti su qualunque telefono.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🚗 Carpooling & Logistica</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Dichiara la tua disponibilità di auto e posti per viaggiare insieme e risparmiare.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🏆 Graduatorie Automatiche</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>L'algoritmo valuta la coesione sociale e lo sforzo di viaggio per trovare la data e la destinazione perfetta.</p>
+          {/* FEATURE GRID */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "18px", marginTop: "44px" }}>
+            {[
+              { icon: "🗳️", title: "Voti in tempo reale", desc: "Gli amici scelgono le date da qualsiasi telefono. Tu vedi tutto aggiornarsi all'istante." },
+              { icon: "🧠", title: "Data ottimale calcolata", desc: "L'algoritmo valuta presenze, coesione del gruppo e sforzo di viaggio per suggerire il giorno perfetto." },
+              { icon: "🚗", title: "Carpooling & posti letto", desc: "Chi ha l'auto, quanti posti, chi dorme dove: la logistica si organizza da sola." },
+              { icon: "🗺️", title: "Mete votate dal gruppo", desc: "Proponi destinazioni e lascia votare gli amici con ❤️ Love, 👍 Like o 👎 No." },
+            ].map((f, i) => (
+              <div key={i} className="glass-panel" style={{ padding: "22px", animationDelay: `${i * 90}ms` }}>
+                <div style={{ width: "46px", height: "46px", borderRadius: "13px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", background: "var(--brand-grad-soft)", border: "1px solid var(--border-glow)", marginBottom: "14px" }}>{f.icon}</div>
+                <h4 style={{ fontSize: "16px", fontWeight: "700", marginBottom: "6px" }}>{f.title}</h4>
+                <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* COME FUNZIONA */}
+          <div className="glass-panel" style={{ marginTop: "28px", padding: "30px" }}>
+            <h3 style={{ textAlign: "center", marginBottom: "24px" }}>Come funziona, in 3 passi</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
+              {[["1", "Crea l'evento", "Scegli tipo, luogo e date — fisse o da votare."], ["2", "Condividi il link", "Mandalo su WhatsApp: gli amici votano in 10 secondi."], ["3", "Partite insieme", "Vedi la data migliore, carpooling e logistica già pronti."]].map(([n, t, d]) => (
+                <div key={n} style={{ textAlign: "center" }}>
+                  <div style={{ width: "44px", height: "44px", margin: "0 auto 12px", borderRadius: "50%", background: "var(--brand-grad)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "19px", fontFamily: "var(--font-display)", boxShadow: "0 8px 20px -6px rgba(217,70,239,0.6)" }}>{n}</div>
+                  <h4 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>{t}</h4>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>{d}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -437,6 +505,8 @@ function CreateEvent({ user, navigate }) {
         };
         localStorage.setItem("mock_db_responses", JSON.stringify([...mockResponses, newResponse]));
 
+        celebrate();
+        toast.success("Condividi il link con gli amici!", "Evento creato 🎉");
         navigate(`/event/${newId}`);
         return;
       }
@@ -460,7 +530,7 @@ function CreateEvent({ user, navigate }) {
         .single();
 
       if (error) {
-        alert("Errore nella creazione dell'evento: " + error.message);
+        toast.error("Errore nella creazione dell'evento: " + error.message);
         return;
       }
 
@@ -480,6 +550,8 @@ function CreateEvent({ user, navigate }) {
           votes: updatedDetails.selectedDates.reduce((acc, date) => ({ ...acc, [date]: 5 }), {})
         });
 
+      celebrate();
+      toast.success("Condividi il link con gli amici!", "Evento creato 🎉");
       navigate(`/event/${data.id}`);
     }
   };
@@ -821,7 +893,18 @@ function EventDashboard({ user, navigate }) {
   };
 
   if (loading) {
-    return <div style={{ padding: "40px", color: "var(--text-secondary)" }}>⏳ Caricamento ritrovo in corso...</div>;
+    return (
+      <div className="glass-panel" style={{ maxWidth: "900px", margin: "0 auto", width: "100%" }}>
+        <Skeleton width="30%" height={12} />
+        <Skeleton width="60%" height={26} style={{ marginTop: 14 }} />
+        <Skeleton width="45%" height={14} style={{ marginTop: 10 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 28 }}>
+          <Skeleton height={120} radius={12} />
+          <Skeleton height={120} radius={12} />
+        </div>
+        <Skeleton height={80} radius={12} style={{ marginTop: 16 }} />
+      </div>
+    );
   }
 
   if (!mappedData) {
@@ -905,7 +988,7 @@ function EventDashboard({ user, navigate }) {
         destination_votes: loggedInParticipant?.destination_votes || {}
       });
 
-    if (error) alert("Errore nel salvataggio: " + error.message);
+    if (error) toast.error("Errore nel salvataggio: " + error.message);
     else fetchEventDetails();
   };
 
@@ -933,7 +1016,7 @@ function EventDashboard({ user, navigate }) {
       })
       .eq("id", target.id);
 
-    if (error) alert("Errore nel salvataggio del profilo: " + error.message);
+    if (error) toast.error("Errore nel salvataggio del profilo: " + error.message);
     else fetchEventDetails();
   };
 
@@ -972,7 +1055,7 @@ function EventDashboard({ user, navigate }) {
         description: newProp.description,
         link: newProp.link
       });
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -987,7 +1070,7 @@ function EventDashboard({ user, navigate }) {
       .from("destination_proposals")
       .delete()
       .eq("id", propId);
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1012,7 +1095,7 @@ function EventDashboard({ user, navigate }) {
       .update({ destination_votes: updatedVotes })
       .eq("id", loggedInParticipant.id);
 
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1032,7 +1115,7 @@ function EventDashboard({ user, navigate }) {
         url: newRes.url,
         category: newRes.category
       });
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1047,7 +1130,7 @@ function EventDashboard({ user, navigate }) {
       .from("resources")
       .delete()
       .eq("id", resId);
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1076,9 +1159,10 @@ function EventDashboard({ user, navigate }) {
       .eq("id", id);
 
     if (error) {
-      alert("Errore nel fissare la data: " + error.message);
+      toast.error("Errore nel fissare la data: " + error.message);
     } else {
-      alert(`Data fissata con successo per il giorno ${formatDateIt(finalDate)}!`);
+      celebrate();
+      toast.success(`Data fissata: ${formatDateIt(finalDate)}!`, "Tutto pronto 🎉");
       fetchEventDetails();
       setDashboardStep("control");
     }
@@ -1258,7 +1342,7 @@ function EventDashboard({ user, navigate }) {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(uniqueInviteLink);
-                alert("Link invito copiato!");
+                toast.success("Link invito copiato negli appunti!");
               }}
               className="btn btn-secondary"
               style={{ padding: "8px 14px", fontSize: "12px" }}

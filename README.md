@@ -2,8 +2,12 @@
 
 Organizzamici è una web-app moderna ed elegante progettata per pianificare ritrovi, weekend, grigliate ed eventi di gruppo con facilità. Supporta la votazione delle date ideali (con calcolo dell'ottimalità algoritmica), la gestione di alloggi/posti letto, il coordinamento delle auto (carpooling), la bacheca risorse e la bacheca dei commenti in tempo reale.
 
+**🔴 Live demo:** [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/)
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici)
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
+
+> ✨ **Restyling completo (giugno 2026):** nuova identità visiva "Aperitivo Notturno" (aurora animata, gradiente brand viola→fuchsia→corallo, glassmorphism, micro-animazioni), notifiche **toast** non bloccanti al posto degli `alert`, **modale di conferma**, **skeleton loader**, **confetti** ai momenti chiave ed **eliminazione evento** per l'organizzatore.
 
 ---
 
@@ -22,12 +26,13 @@ Organizzamici è una web-app moderna ed elegante progettata per pianificare ritr
 
 ---
 
-## 🚀 Deployment Rapido
+## 🚀 Deployment
 
-Puoi pubblicare l'applicazione gratuitamente in pochi secondi utilizzando uno dei seguenti bottoni:
+L'app è già **online su GitHub Pages**: [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/). La configurazione Vite usa `base: './'` (percorsi relativi), quindi gli stessi file girano senza modifiche anche su Vercel, Netlify o qualsiasi hosting statico.
 
-* **Vercel**: Clicca su [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) per importare il repository ed effettuare il deploy.
-* **Netlify**: Clicca su [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici) per avviare il deploy continuo da GitHub.
+* **GitHub Pages**: la sorgente Pages è il branch `gh-pages`. Per ripubblicare dopo modifiche basta `npm run build` e caricare il contenuto di `dist/` su quel branch.
+* **Vercel**: [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) — importa il repository e fai il deploy.
+* **Netlify**: [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici) — deploy continuo da GitHub.
 
 ---
 

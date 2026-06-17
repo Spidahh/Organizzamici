@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { optimizeDates } from "../utils/schedulerAlgorithm";
+import { toast, confirmDialog } from "../ui";
 
 export default function ResultsOptimizer({
   eventLocation,
@@ -812,10 +813,14 @@ export default function ResultsOptimizer({
                         </button>
                         {isOrganizer && !isSingleFixedDate && (
                           <button
-                            onClick={() => {
-                              if (window.confirm(`Sei sicuro di voler fissare definitivamente la data dell'evento per il giorno ${formatDateIt(selectedDetails.date)}? Questo disabiliterà il tabellone di voto e attiverà il riepilogo logistico finalizzato.`)) {
-                                onFinalizeDate(selectedDetails.date);
-                              }
+                            onClick={async () => {
+                              const ok = await confirmDialog({
+                                title: "Fissare la data?",
+                                message: `Sei sicuro di voler fissare definitivamente la data dell'evento per il giorno ${formatDateIt(selectedDetails.date)}? Questo disabiliterà il tabellone di voto e attiverà il riepilogo logistico finalizzato.`,
+                                confirmText: "Sì, fissa la data",
+                                danger: false,
+                              });
+                              if (ok) onFinalizeDate(selectedDetails.date);
                             }}
                             className="btn btn-secondary"
                             style={{ fontSize: "14px", width: "100%", background: "var(--color-available-bg)", color: "var(--color-available)", border: "1px solid rgba(16, 185, 129, 0.3)" }}
@@ -976,7 +981,7 @@ export default function ResultsOptimizer({
             onSubmit={(e) => {
               e.preventDefault();
               if (!resTitle.trim() || !resUrl.trim()) {
-                alert("Titolo e URL sono obbligatori!");
+                toast.error("Titolo e URL sono obbligatori!");
                 return;
               }
               let formattedUrl = resUrl.trim();

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { estimateTravelTime, CITIES } from "../utils/geoData";
+import { toast } from "../ui";
 
 export default function AvailabilitySelector({
   eventLocation,
@@ -133,7 +134,7 @@ export default function AvailabilitySelector({
         hasCar: tempHasCar,
         carSeats: tempHasCar ? tempCarSeats : 0
       });
-      alert("Opzioni viaggio e lavoro salvate!");
+      toast.success("Opzioni viaggio e lavoro salvate!");
     }
   };
 
@@ -159,13 +160,13 @@ export default function AvailabilitySelector({
     if (isNewRegistration) {
       const trimmedName = regName.trim();
       if (!trimmedName) {
-        alert("Inserisci il tuo nome per registrarti!");
+        toast.error("Inserisci il tuo nome per registrarti!");
         return;
       }
       
       const nameExists = participants.some(p => p.name.toLowerCase() === trimmedName.toLowerCase());
       if (nameExists) {
-        alert(`Il nome "${trimmedName}" è già registrato nel tabellone. Per favore usa un nome o soprannome diverso.`);
+        toast.error(`Il nome "${trimmedName}" è già registrato nel tabellone. Per favore usa un nome o soprannome diverso.`);
         return;
       }
       
@@ -554,7 +555,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "love" ? "" : "love");
@@ -575,7 +576,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "like" ? "" : "like");
@@ -596,7 +597,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "no" ? "" : "no");
@@ -654,7 +655,7 @@ export default function AvailabilitySelector({
                   const linkEl = document.getElementById("new-dest-link");
                   
                   if (!nameEl.value.trim()) {
-                    alert("Inserisci almeno il nome della proposta!");
+                    toast.error("Inserisci almeno il nome della proposta!");
                     return;
                   }
                   
@@ -885,7 +886,7 @@ export default function AvailabilitySelector({
             onSubmit={(e) => {
               e.preventDefault();
               if (!resTitle.trim() || !resUrl.trim()) {
-                alert("Titolo e URL sono obbligatori!");
+                toast.error("Titolo e URL sono obbligatori!");
                 return;
               }
               let formattedUrl = resUrl.trim();
