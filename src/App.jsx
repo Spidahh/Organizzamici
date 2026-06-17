@@ -66,6 +66,38 @@ const DEMO_SCENARIO = {
   ]
 };
 
+// Selettore del colore accento (tema). La scelta è dell'utente e viene
+// salvata in localStorage e applicata su <html data-theme="...">.
+const THEMES = [
+  { id: "amber", cls: "theme-dot-amber", label: "Oro / ambra" },
+  { id: "lime", cls: "theme-dot-lime", label: "Lime" },
+  { id: "teal", cls: "theme-dot-teal", label: "Teal turchese" },
+];
+
+function ThemeSwitch() {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("app_theme") || "teal"; } catch { return "teal"; }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("app_theme", theme); } catch { /* no-op */ }
+  }, [theme]);
+  return (
+    <div className="theme-switch" role="group" aria-label="Colore dell'app">
+      {THEMES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={`theme-dot ${t.cls} ${theme === t.id ? "active" : ""}`}
+          aria-label={`Tema ${t.label}`}
+          title={t.label}
+          onClick={() => setTheme(t.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 // Componente Root principale che avvolge l'app in HashRouter
 export default function App() {
   return (
@@ -208,6 +240,7 @@ function AppContent() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <ThemeSwitch />
           {user ? (
             <>
               <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }} className="user-email-header">
@@ -362,7 +395,7 @@ function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEve
         <div style={{ width: "100%" }}>
           {/* HERO */}
           <div style={{ textAlign: "center", maxWidth: "760px", margin: "0 auto", padding: "16px 0 8px" }}>
-            <div className="float-anim" style={{ fontSize: "66px", marginBottom: "16px", filter: "drop-shadow(0 14px 34px rgba(217,70,239,0.55))" }}>🥂</div>
+            <div className="float-anim" style={{ fontSize: "66px", marginBottom: "16px", filter: "drop-shadow(0 14px 34px rgba(var(--accent-rgb),0.55))" }}>🥂</div>
             <span className="badge chip-gradient" style={{ fontSize: "12px" }}>✨ Basta mille chat di gruppo per decidere una data</span>
             <h1 style={{ fontSize: "clamp(32px, 6.2vw, 56px)", lineHeight: 1.05, margin: "18px 0 16px" }}>
               Organizza ritrovi tra amici<br /><span className="text-gradient">senza stress</span>
@@ -405,7 +438,7 @@ function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEve
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
               {[["1", "Crea l'evento", "Scegli tipo, luogo e date — fisse o da votare."], ["2", "Condividi il link", "Mandalo su WhatsApp: gli amici votano in 10 secondi."], ["3", "Partite insieme", "Vedi la data migliore, carpooling e logistica già pronti."]].map(([n, t, d]) => (
                 <div key={n} style={{ textAlign: "center" }}>
-                  <div style={{ width: "44px", height: "44px", margin: "0 auto 12px", borderRadius: "50%", background: "var(--brand-grad)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "19px", fontFamily: "var(--font-display)", boxShadow: "0 8px 20px -6px rgba(217,70,239,0.6)" }}>{n}</div>
+                  <div style={{ width: "44px", height: "44px", margin: "0 auto 12px", borderRadius: "50%", background: "var(--brand-grad)", color: "#07221d", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "19px", fontFamily: "var(--font-display)", boxShadow: "0 8px 20px -6px rgba(var(--accent-rgb),0.6)" }}>{n}</div>
                   <h4 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>{t}</h4>
                   <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>{d}</p>
                 </div>

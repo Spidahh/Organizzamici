@@ -108,7 +108,7 @@ export function UIProvider({ children }) {
 /* Confetti leggero senza dipendenze, per i momenti di festa 🎉 */
 export function celebrate() {
   try {
-    const colors = ["#7c3aed", "#d946ef", "#fb7185", "#34d399", "#fbbf24", "#818cf8"];
+    const colors = ["#14b8a6", "#2dd4bf", "#f59e0b", "#84cc16", "#34d399", "#fb7185", "#38bdf8", "#fbbf24"];
     const root = document.createElement("div");
     root.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:10000;overflow:hidden";
     document.body.appendChild(root);
