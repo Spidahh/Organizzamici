@@ -2,41 +2,40 @@
 
 Organizzamici è una web-app per organizzare ritrovi, weekend, cene ed eventi di gruppo tra amici. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando viaggi, impegni e turni di lavoro. Include carpooling, posti letto, destinazioni votabili dal gruppo, bacheca link e commenti.
 
-**🔴 Live demo:** [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/)
+**🔴 Live:** [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/)
 
 ---
 
-## ✨ Come funziona (nessun login)
+## ✨ Come funziona
 
-1. **Crea l'evento** — scegli tipo, luogo e date (fisse o da votare).
-2. **Condividi il link** — mandalo su WhatsApp.
-3. **Gli amici votano** — aprono il link, scrivono il loro nome e votano. **Nessun account, nessuna email da confermare.**
+1. **Registrati / accedi** — con email e password (account gratuito, accesso immediato).
+2. **Crea l'evento** — tipo, luogo e date (fisse o da votare).
+3. **Condividi il link** — gli amici accedono e votano.
+4. **Pannello utente** — ritrovi che hai organizzato e quelli a cui ti sei unito, tutti in un posto.
 
-Tutto (voti, commenti, carpooling, destinazioni, risorse) è **condiviso in tempo reale** tra tutti su un database reale. L'identità è un id stabile per dispositivo + il nome scelto, salvati nel browser — niente password.
-
-> 🔒 **Modello di sicurezza:** "link segreto" (come Doodle). Chi ha il link di un evento può vederlo e modificarlo. Perfetto per cose tra amici; non pensato per dati sensibili.
+Tutto (voti, commenti, carpooling, destinazioni, risorse) è **condiviso in tempo reale** tra tutti su database reale (Supabase).
 
 ---
 
 ## 🌟 Funzionalità
 
+- **🔑 Account** email/password con pannello dei propri eventi (creati e a cui si partecipa).
 - **📅 Data fissa o date da votare** con griglia interattiva.
-- **🎯 Algoritmo di ottimizzazione**: calcola la data migliore pesando presenze, coesione del gruppo e sforzo di viaggio (tempi, ferie necessarie, posti letto).
-- **🔒 Finalizzazione data** dall'ottimizzatore (l'organizzatore fissa la data definitiva).
+- **🎯 Algoritmo di ottimizzazione**: la data migliore pesando presenze, coesione del gruppo e sforzo di viaggio (tempi, ferie, posti letto).
+- **🔒 Finalizzazione data** dall'ottimizzatore.
 - **🚗 Carpooling** con calcolo posti auto/passeggeri.
-- **🛏️ Gestione posti letto** per weekend e vacanze.
-- **🗺️ Destinazioni collaborative** votabili (❤️ Love / 👍 Like / 👎 No).
+- **🛏️ Gestione posti letto**.
+- **🗺️ Destinazioni collaborative** votabili (❤️ / 👍 / 👎).
 - **💬 Bacheca commenti & risorse** in tempo reale.
 - **🎨 Tema a scelta** (Ambra / Lime / Teal) dall'header.
-- **💾 Modalità locale**: senza database configurato l'app funziona comunque salvando in `localStorage` (utile in sviluppo) + scenario demo su `/event/demo`.
+- **💾 Modalità locale** (senza database, dati nel browser) per lo sviluppo.
 
 ---
 
 ## 🚀 Deployment
 
-Online su **GitHub Pages** (branch `gh-pages`). La build Vite usa `base: './'` (percorsi relativi), quindi gli stessi file girano anche su Vercel/Netlify o qualsiasi hosting statico.
+Online su **GitHub Pages** (branch `gh-pages`). La build Vite usa `base: './'`, quindi gli stessi file girano anche su Vercel/Netlify o qualsiasi hosting statico.
 
-Per ripubblicare dopo modifiche:
 ```bash
 npm run build          # genera dist/ (con le credenziali da .env)
 # poi pubblica il contenuto di dist/ sul branch gh-pages
@@ -51,20 +50,20 @@ npm run build          # genera dist/ (con le credenziali da .env)
 L'app live è già collegata a un progetto Supabase. Per usarne uno tuo:
 
 1. Crea un progetto gratuito su [Supabase](https://supabase.com/).
-2. Esegui il contenuto di [`schema.sql`](schema.sql) nell'SQL Editor (crea le tabelle, le policy permissive e abilita il realtime).
-3. Copia `.env.example` in `.env` e inserisci le tue credenziali:
+2. Esegui [`schema.sql`](schema.sql) nell'SQL Editor (tabelle, RLS, realtime e auto-conferma email per il login immediato).
+3. Copia `.env.example` in `.env` e inserisci le credenziali:
    ```env
    VITE_SUPABASE_URL=la_tua_supabase_url
    VITE_SUPABASE_ANON_KEY=la_tua_anon_key
    ```
-   (Il file `.env` è ignorato da git; la anon key è pubblica e viene inclusa nel build statico — è protetta dalle policy del database.)
+   (`.env` è ignorato da git; la anon key è pubblica e protetta dalle policy del database.)
 
 ---
 
 ## 💻 Sviluppo locale
 
 ```bash
-npm install     # installa le dipendenze
-npm run dev     # server di sviluppo
-npm run build   # build di produzione
+npm install
+npm run dev
+npm run build
 ```

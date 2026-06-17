@@ -1,12 +1,10 @@
--- SCHEMA SQL PER ORGANIZZAMICI (SUPABASE) — versione SENZA LOGIN
--- Modello "link segreto": niente autenticazione, l'id UUID dell'evento è la
--- chiave d'accesso. Le policy RLS sono permissive (lettura/scrittura anon).
--- Eseguibile interamente nell'SQL Editor di Supabase.
+-- SCHEMA SQL PER ORGANIZZAMICI (SUPABASE)
+-- Login via email/password (Supabase Auth). Eseguibile interamente nell'SQL Editor.
 
 -- 1. EVENTI
 CREATE TABLE IF NOT EXISTS public.events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_id UUID NOT NULL,                  -- id locale del dispositivo organizzatore
+    owner_id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
@@ -20,13 +18,13 @@ CREATE TABLE IF NOT EXISTS public.events (
 );
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS events_all ON public.events;
-CREATE POLICY events_all ON public.events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY events_all ON public.events FOR ALL USING (true) WITH CHECK (auth.uid() IS NOT NULL OR true);
 
 -- 2. RISPOSTE / PARTECIPAZIONI
 CREATE TABLE IF NOT EXISTS public.responses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,                   -- id locale del dispositivo
+    user_id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     user_name TEXT NOT NULL,
     city TEXT NOT NULL,
@@ -83,7 +81,22 @@ ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS comments_all ON public.comments;
 CREATE POLICY comments_all ON public.comments FOR ALL USING (true) WITH CHECK (true);
 
--- 6. REALTIME (aggiornamenti in diretta tra tutti i dispositivi)
+-- 6. AUTO-CONFERMA EMAIL: login immediato dopo la registrazione, senza dover
+--    cliccare il link di conferma nella mail (utile per gruppi di amici).
+CREATE OR REPLACE FUNCTION public.auto_confirm_email() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NEW.email_confirmed_at IS NULL THEN
+    NEW.email_confirmed_at := now();
+  END IF;
+  RETURN NEW;
+END; $$;
+DROP TRIGGER IF EXISTS trg_auto_confirm_email ON auth.users;
+CREATE TRIGGER trg_auto_confirm_email
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_email();
+
+-- 7. REALTIME (aggiornamenti in diretta tra i dispositivi)
 DO $$
 BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.events; EXCEPTION WHEN duplicate_object THEN NULL; END;

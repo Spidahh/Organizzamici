@@ -6,7 +6,7 @@ import AvailabilitySelector from "./components/AvailabilitySelector";
 import ResultsOptimizer from "./components/ResultsOptimizer";
 import Auth from "./components/Auth";
 import { optimizeDates } from "./utils/schedulerAlgorithm";
-import { toast, confirmDialog, promptDialog, celebrate, Skeleton } from "./ui";
+import { toast, confirmDialog, celebrate, Skeleton } from "./ui";
 
 // Shared date formatters
 const formatDateShort = (dateStr) => {
@@ -98,28 +98,6 @@ function ThemeSwitch() {
   );
 }
 
-// Identità locale persistente: nessun login richiesto. Generiamo un id stabile
-// per dispositivo (UUID valido per il DB) e un nome scelto dall'utente.
-function uuidv4() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-function loadIdentity() {
-  let id = "", name = "";
-  try {
-    id = localStorage.getItem("oa_uid") || "";
-    if (!id) { id = uuidv4(); localStorage.setItem("oa_uid", id); }
-    name = localStorage.getItem("oa_uname") || "";
-  } catch { /* no-op */ }
-  return { id: id || uuidv4(), name, user_metadata: { display_name: name }, email: "" };
-}
-function saveIdentityName(name) {
-  try { localStorage.setItem("oa_uname", name); } catch { /* no-op */ }
-}
-
 // Componente Root principale che avvolge l'app in HashRouter
 export default function App() {
   return (
@@ -130,17 +108,46 @@ export default function App() {
 }
 
 function AppContent() {
-  const [user, setUser] = useState(loadIdentity);
+  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
   const [myEvents, setMyEvents] = useState([]);
   const [myParticipations, setMyParticipations] = useState([]);
   const [loadingUserEvents, setLoadingUserEvents] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Nessun login: carichiamo l'identità locale stabile del dispositivo.
+  // Monitora lo stato dell'autenticazione
   useEffect(() => {
-    const u = loadIdentity();
-    setUser(u);
-    fetchUserEvents(u.id);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserEvents(session.user.id);
+        const oauthRedirect = localStorage.getItem("oauth_redirect_path");
+        if (oauthRedirect) {
+          localStorage.removeItem("oauth_redirect_path");
+          navigate(oauthRedirect);
+        }
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserEvents(session.user.id);
+        const oauthRedirect = localStorage.getItem("oauth_redirect_path");
+        if (oauthRedirect) {
+          localStorage.removeItem("oauth_redirect_path");
+          navigate(oauthRedirect);
+        }
+      } else {
+        setMyEvents([]);
+        setMyParticipations([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchUserEvents = async (userId) => {
@@ -186,19 +193,10 @@ function AppContent() {
     setLoadingUserEvents(false);
   };
 
-  const handleRename = async () => {
-    const name = await promptDialog({
-      title: "Come ti chiami?",
-      message: "Il nome con cui gli amici ti vedranno negli eventi.",
-      placeholder: "Es. Marco",
-      defaultValue: user?.name || "",
-      confirmText: "Salva",
-    });
-    if (name) {
-      saveIdentityName(name);
-      setUser(loadIdentity());
-      toast.success("Nome impostato!");
-    }
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.info("A presto! 👋");
+    navigate("/");
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -243,14 +241,21 @@ function AppContent() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <ThemeSwitch />
-          {user?.name ? (
-            <button onClick={handleRename} className="user-email-header" title="Cambia il tuo nome" style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600", cursor: "pointer", background: "var(--bg-inset)" }}>
-              👤 {user.name} ✏️
-            </button>
+          {user ? (
+            <>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }} className="user-email-header">
+                👤 {user.user_metadata?.display_name || user.email}
+              </span>
+              <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "12px" }}>
+                Esci 🚪
+              </button>
+            </>
           ) : (
-            <button onClick={handleRename} className="btn btn-secondary" style={{ padding: "6px 14px", fontSize: "12px" }}>
-              👤 Imposta il tuo nome
-            </button>
+            location.pathname !== "/login" && (
+              <button onClick={() => navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)} className="btn btn-primary" style={{ padding: "6px 16px", fontSize: "12px" }}>
+                Accedi 🔑
+              </button>
+            )
           )}
         </div>
       </header>
@@ -259,8 +264,9 @@ function AppContent() {
       <main style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <Routes>
           <Route path="/" element={<Home user={user} myEvents={myEvents} myParticipations={myParticipations} loading={loadingUserEvents} navigate={navigate} onDeleteEvent={handleDeleteEvent} />} />
-          <Route path="/create" element={<CreateEvent user={user} setUser={setUser} navigate={navigate} />} />
-          <Route path="/event/:id" element={<EventDashboard user={user} setUser={setUser} navigate={navigate} />} />
+          <Route path="/login" element={<LoginPage user={user} navigate={navigate} />} />
+          <Route path="/create" element={<CreateEvent user={user} navigate={navigate} />} />
+          <Route path="/event/:id" element={<EventDashboard user={user} navigate={navigate} />} />
         </Routes>
       </main>
 
@@ -277,8 +283,8 @@ function AppContent() {
 function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEvent }) {
   return (
     <div style={{ width: "100%" }}>
-      {(user?.name || myEvents.length > 0 || myParticipations.length > 0) ? (
-        // DASHBOARD UTENTE (con nome o eventi)
+      {user ? (
+        // DASHBOARD UTENTE LOGGATO
         <div className="glass-panel" style={{ maxWidth: "800px", margin: "0 auto", textAlign: "left", display: "flex", flexDirection: "column", gap: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
             <div>
@@ -398,11 +404,8 @@ function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEve
               Crea l'evento e condividi un link. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando <strong style={{ color: "var(--text-primary)" }}>viaggi, impegni e turni di lavoro</strong>.
             </p>
             <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-              <button onClick={() => navigate("/create")} className="btn btn-primary" style={{ padding: "14px 32px", fontSize: "16px" }}>
+              <button onClick={() => navigate("/login?redirect=/create")} className="btn btn-primary" style={{ padding: "14px 32px", fontSize: "16px" }}>
                 Crea il tuo Evento ➔
-              </button>
-              <button onClick={() => navigate("/event/demo")} className="btn btn-secondary" style={{ padding: "14px 26px", fontSize: "16px" }}>
-                👀 Prova la Demo
               </button>
             </div>
             <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "16px" }}>
@@ -465,7 +468,7 @@ function LoginPage({ user, navigate }) {
 // ----------------------------------------------------
 // PAGINA 3: EVENT CREATOR WIZARD (ORGANIZZATORE)
 // ----------------------------------------------------
-function CreateEvent({ user, setUser, navigate }) {
+function CreateEvent({ user, navigate }) {
   const [step, setStep] = useState(1);
   const [eventDetails, setEventDetails] = useState({
     title: "Ritrovo Amici",
@@ -480,19 +483,11 @@ function CreateEvent({ user, setUser, navigate }) {
   });
 
   useEffect(() => {
-    // Nessun login: chiediamo solo il nome la prima volta.
-    if (user && !user.name) {
-      promptDialog({
-        title: "Come ti chiami?",
-        message: "Serve per farti riconoscere dagli amici nell'evento.",
-        placeholder: "Es. Marco",
-        confirmText: "Continua",
-      }).then((name) => {
-        if (name) { saveIdentityName(name); setUser(loadIdentity()); }
-        else navigate("/");
-      });
+    // Forza login prima di creare un evento
+    if (!user) {
+      navigate("/login?redirect=/create");
     }
-  }, [user, navigate, setUser]);
+  }, [user, navigate]);
 
   const handleNext = async (details) => {
     const updatedDetails = { ...eventDetails, ...details };
@@ -528,7 +523,7 @@ function CreateEvent({ user, setUser, navigate }) {
           id: `res-${Date.now()}`,
           event_id: newId,
           user_id: user.id,
-          user_name: user?.name || "Organizzatore",
+          user_name: user.user_metadata?.display_name || user.email.split("@")[0],
           city: updatedDetails.location,
           transport_mode: "auto",
           needs_bed: false,
@@ -575,7 +570,7 @@ function CreateEvent({ user, setUser, navigate }) {
         .insert({
           event_id: data.id,
           user_id: user.id,
-          user_name: user?.name || "Organizzatore",
+          user_name: user.user_metadata?.display_name || user.email.split("@")[0],
           city: updatedDetails.location,
           transport_mode: "auto",
           needs_bed: false,
@@ -609,7 +604,7 @@ function CreateEvent({ user, setUser, navigate }) {
 // ----------------------------------------------------
 // PAGINA 4: EVENT DASHBOARD & RISOLUTORE (REALTIME)
 // ----------------------------------------------------
-function EventDashboard({ user, setUser, navigate }) {
+function EventDashboard({ user, navigate }) {
   const { id } = useParams();
   const [isDemo, setIsDemo] = useState(id === "demo");
   const [loading, setLoading] = useState(true);
@@ -633,7 +628,7 @@ function EventDashboard({ user, setUser, navigate }) {
   const defaultName = isDemo 
     ? "" 
     : user 
-      ? (user?.name || "") 
+      ? (user.user_metadata?.display_name || user.email.split("@")[0]) 
       : "";
 
   // Caricamento e Realtime Sync
@@ -1006,6 +1001,7 @@ function EventDashboard({ user, setUser, navigate }) {
       return;
     }
 
+    if (!user) return;
     const { error } = await supabase
       .from("responses")
       .upsert({
@@ -1020,10 +1016,10 @@ function EventDashboard({ user, setUser, navigate }) {
         rest_days: newGuest.restDays,
         votes: votes,
         destination_votes: loggedInParticipant?.destination_votes || {}
-      }, { onConflict: "event_id,user_id" });
+      });
 
     if (error) toast.error("Errore nel salvataggio: " + error.message);
-    else { saveIdentityName(newGuest.name); setUser(loadIdentity()); fetchEventDetails(); }
+    else fetchEventDetails();
   };
 
   const handleUpdateParticipantInfo = async (participantName, updatedInfo) => {
@@ -1766,7 +1762,7 @@ function EventDashboard({ user, setUser, navigate }) {
             if (!dashboardCommentText.trim()) return;
             const author = loggedInParticipant
               ? (loggedInParticipant.user_name || loggedInParticipant.name)
-              : (user?.name || "Ospite");
+              : (user ? (user.user_metadata?.display_name || user.email.split("@")[0]) : "Ospite");
             handleAddComment(author, dashboardCommentText);
             setDashboardCommentText("");
           }}
