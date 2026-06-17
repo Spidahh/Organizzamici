@@ -1,16 +1,66 @@
-# React + Vite
+# 👥 Organizzamici
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Organizzamici è una web-app moderna ed elegante progettata per pianificare ritrovi, weekend, grigliate ed eventi di gruppo con facilità. Supporta la votazione delle date ideali (con calcolo dell'ottimalità algoritmica), la gestione di alloggi/posti letto, il coordinamento delle auto (carpooling), la bacheca risorse e la bacheca dei commenti in tempo reale.
 
-Currently, two official plugins are available:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 🌟 Funzionalità Principali
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **📅 Flusso Smart Data Fissa & Voto**:
+  - **Data Fissa**: Se l'evento ha una data stabilita, la procedura guidata salta lo Step 2 del calendario e mostra direttamente la dashboard consolidata con logistica, auto e alloggi.
+  - **Date da Votare**: Permette agli invitati di votare le date di disponibilità su una griglia interattiva.
+- **🎯 Algoritmo Ottimizzazione Date**: Calcola e ordina le date migliori per massimizzare la presenza del gruppo e trovare la soluzione ottimale.
+- **🔒 Finalizzazione Data**: L'organizzatore può fissare una data come definitiva direttamente dall'ottimizzatore, disabilitando la votazione e convertendo la dashboard in modalità data singola.
+- **🚗 Coordinamento Trasporti**: Sistema di carpooling integrato con calcolo posti auto e passeggeri.
+- **🛏️ Gestione Posti Letto**: Monitoraggio della disponibilità degli alloggi per pianificare weekend e vacanze di gruppo.
+- **💬 Bacheca dei Commenti & Risorse**: Posta commenti al volo direttamente dalla dashboard e condividi link e info utili.
+- **🔄 Google OAuth & Email Login**: Autenticazione integrata (con risoluzione dei conflitti di redirect su client-side routing).
+- **💾 Modalità Emulata Zero-Config**: Se non viene configurato un database Supabase, l'app funziona immediatamente in locale salvando tutti i dati in modo persistente tramite `localStorage`.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🚀 Deployment Rapido
+
+Puoi pubblicare l'applicazione gratuitamente in pochi secondi utilizzando uno dei seguenti bottoni:
+
+* **Vercel**: Clicca su [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) per importare il repository ed effettuare il deploy.
+* **Netlify**: Clicca su [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici) per avviare il deploy continuo da GitHub.
+
+---
+
+## 🛠️ Configurazione Supabase (Opzionale)
+
+Se desideri salvare i dati in un database reale condiviso con i tuoi amici anziché utilizzare il database emulato in locale, segui questi passaggi:
+
+1. Crea un progetto gratuito su [Supabase](https://supabase.com/).
+2. Copia ed esegui il codice SQL presente nel file [`schema.sql`](file:///e:/PROGETTI/Organizzamici/schema.sql) nell'editor SQL (SQL Editor) di Supabase per creare le tabelle e impostare le policy RLS.
+3. Copia il file `.env.example` in `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Configura le tue credenziali Supabase nel file `.env`:
+   ```env
+   VITE_SUPABASE_URL=la_tua_supabase_url
+   VITE_SUPABASE_ANON_KEY=la_tua_anon_key
+   ```
+5. Su Supabase, abilita **Google** come Provider di Autenticazione sotto la sezione *Authentication -> Providers*. Aggiungi `https://<tuo-dominio-vercel-o-netlify>` come URL di redirect autorizzato.
+
+---
+
+## 💻 Sviluppo Locale
+
+1. Installa le dipendenze:
+   ```bash
+   npm install
+   ```
+2. Avvia il server di sviluppo locale:
+   ```bash
+   npm run dev
+   ```
+3. Avvia la build per produzione:
+   ```bash
+   npm run build
+   ```
