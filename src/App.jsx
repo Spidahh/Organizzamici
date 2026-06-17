@@ -471,9 +471,9 @@ function LoginPage({ user, navigate }) {
 function CreateEvent({ user, navigate }) {
   const [step, setStep] = useState(1);
   const [eventDetails, setEventDetails] = useState({
-    title: "Ritrovo Amici",
-    description: "Inserisci qui le note o il programma dell'evento!",
-    customLocation: "Villa La Novellina (Chianti)",
+    title: "",
+    description: "",
+    customLocation: "",
     location: "Firenze",
     bedsAvailable: 4,
     eventType: "weekend",

@@ -9,13 +9,9 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
     initialData?.collaborativeDestination || false
   );
 
-  const [title, setTitle] = useState(initialData?.title || "Ritrovo Amici");
-  const [description, setDescription] = useState(
-    initialData?.description || "Inserisci qui le note o il programma dell'evento!"
-  );
-  const [customLocation, setCustomLocation] = useState(
-    initialData?.customLocation || "Villa La Novellina (Chianti)"
-  );
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [customLocation, setCustomLocation] = useState(initialData?.customLocation || "");
   const [location, setLocation] = useState(initialData?.location || "Firenze");
   const [bedsAvailable, setBedsAvailable] = useState(initialData?.bedsAvailable || 4);
   
