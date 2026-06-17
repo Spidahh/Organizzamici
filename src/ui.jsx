@@ -13,6 +13,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 
 let pushToastFn = null;
 let openConfirmFn = null;
+let openPromptFn = null;
 
 export const toast = {
   success: (message, title) => pushToastFn && pushToastFn({ type: "success", message, title }),
@@ -27,11 +28,20 @@ export function confirmDialog(opts = {}) {
   });
 }
 
+export function promptDialog(opts = {}) {
+  return new Promise((resolve) => {
+    if (openPromptFn) openPromptFn(opts, resolve);
+    else resolve(window.prompt(opts.message || opts.title || "", opts.defaultValue || "") || null);
+  });
+}
+
 const ICONS = { success: "✅", error: "⚠️", info: "✨" };
 
 export function UIProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const [confirmState, setConfirmState] = useState(null);
+  const [promptState, setPromptState] = useState(null);
+  const [promptValue, setPromptValue] = useState("");
   const idRef = useRef(0);
 
   const removeToast = useCallback((id) => {
@@ -46,12 +56,19 @@ export function UIProvider({ children }) {
       setTimeout(() => removeToast(id), 4200);
     };
     openConfirmFn = (opts, resolve) => setConfirmState({ opts, resolve });
-    return () => { pushToastFn = null; openConfirmFn = null; };
+    openPromptFn = (opts, resolve) => { setPromptValue(opts.defaultValue || ""); setPromptState({ opts, resolve }); };
+    return () => { pushToastFn = null; openConfirmFn = null; openPromptFn = null; };
   }, [removeToast]);
 
   const closeConfirm = (value) => {
     if (confirmState) confirmState.resolve(value);
     setConfirmState(null);
+  };
+
+  const closePrompt = (value) => {
+    if (promptState) promptState.resolve(value);
+    setPromptState(null);
+    setPromptValue("");
   };
 
   return (
@@ -99,6 +116,40 @@ export function UIProvider({ children }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modale per inserire un valore di testo (es. il nome) */}
+      {promptState && (
+        <div className="modal-overlay" onClick={() => closePrompt(null)}>
+          <form
+            className="modal-box"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => { e.preventDefault(); closePrompt(promptValue.trim() || null); }}
+          >
+            <div style={{ fontSize: "40px", marginBottom: "8px" }}>{promptState.opts.icon || "👤"}</div>
+            <h3 style={{ fontSize: "20px", marginBottom: promptState.opts.message ? "6px" : "16px" }}>
+              {promptState.opts.title || "Inserisci un valore"}
+            </h3>
+            {promptState.opts.message && (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginBottom: "16px" }}>{promptState.opts.message}</p>
+            )}
+            <input
+              autoFocus
+              type="text"
+              value={promptValue}
+              onChange={(e) => setPromptValue(e.target.value)}
+              placeholder={promptState.opts.placeholder || ""}
+              maxLength={40}
+              style={{ marginBottom: "18px" }}
+            />
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => closePrompt(null)}>
+                {promptState.opts.cancelText || "Annulla"}
+              </button>
+              <button type="submit" className="btn btn-primary">{promptState.opts.confirmText || "Conferma"}</button>
+            </div>
+          </form>
         </div>
       )}
     </>
