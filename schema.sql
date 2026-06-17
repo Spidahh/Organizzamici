@@ -1,12 +1,12 @@
--- SCHEMA SQL PER LE TABELLE DI ORGANIZZAMICI (SUPABASE)
+-- SCHEMA SQL PER ORGANIZZAMICI (SUPABASE) — versione SENZA LOGIN
+-- Modello "link segreto": niente autenticazione, l'id UUID dell'evento è la
+-- chiave d'accesso. Le policy RLS sono permissive (lettura/scrittura anon).
+-- Eseguibile interamente nell'SQL Editor di Supabase.
 
--- 1. Abilitazione estensione UUID (se non già attiva)
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- 2. Tabella EVENTI
-CREATE TABLE public.events (
+-- 1. EVENTI
+CREATE TABLE IF NOT EXISTS public.events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL,                  -- id locale del dispositivo organizzatore
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
@@ -18,29 +18,15 @@ CREATE TABLE public.events (
     collaborative_destination BOOLEAN DEFAULT false NOT NULL,
     track_beds BOOLEAN DEFAULT true NOT NULL
 );
-
--- RLS (Row Level Security) per Events
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS events_all ON public.events;
+CREATE POLICY events_all ON public.events FOR ALL USING (true) WITH CHECK (true);
 
--- Politiche di accesso per Events
-CREATE POLICY "Tutti possono visualizzare gli eventi tramite ID" 
-ON public.events FOR SELECT USING (true);
-
-CREATE POLICY "Gli utenti autenticati possono creare eventi" 
-ON public.events FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Solo l'owner può aggiornare l'evento" 
-ON public.events FOR UPDATE USING (auth.uid() = owner_id);
-
-CREATE POLICY "Solo l'owner può cancellare l'evento" 
-ON public.events FOR DELETE USING (auth.uid() = owner_id);
-
-
--- 3. Tabella RISPOSTE / PARTECIPAZIONI (Responses)
-CREATE TABLE public.responses (
+-- 2. RISPOSTE / PARTECIPAZIONI
+CREATE TABLE IF NOT EXISTS public.responses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,                   -- id locale del dispositivo
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     user_name TEXT NOT NULL,
     city TEXT NOT NULL,
@@ -53,26 +39,12 @@ CREATE TABLE public.responses (
     destination_votes JSONB DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT unique_event_user UNIQUE (event_id, user_id)
 );
-
--- RLS per Responses
 ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS responses_all ON public.responses;
+CREATE POLICY responses_all ON public.responses FOR ALL USING (true) WITH CHECK (true);
 
--- Politiche di accesso per Responses
-CREATE POLICY "Tutti possono visualizzare le risposte di un evento" 
-ON public.responses FOR SELECT USING (true);
-
-CREATE POLICY "Gli utenti autenticati possono aggiungere la propria risposta" 
-ON public.responses FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Gli utenti possono aggiornare solo la propria risposta" 
-ON public.responses FOR UPDATE USING (auth.uid() = user_id);
-
-CREATE POLICY "Gli utenti possono rimuovere solo la propria risposta" 
-ON public.responses FOR DELETE USING (auth.uid() = user_id);
-
-
--- 4. Tabella PROPOSTE DESTINAZIONE (Destination Proposals)
-CREATE TABLE public.destination_proposals (
+-- 3. PROPOSTE DESTINAZIONE
+CREATE TABLE IF NOT EXISTS public.destination_proposals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -80,28 +52,12 @@ CREATE TABLE public.destination_proposals (
     description TEXT,
     link TEXT
 );
-
--- RLS per Destination Proposals
 ALTER TABLE public.destination_proposals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS dest_all ON public.destination_proposals;
+CREATE POLICY dest_all ON public.destination_proposals FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Tutti possono vedere le proposte di destinazione" 
-ON public.destination_proposals FOR SELECT USING (true);
-
-CREATE POLICY "Gli utenti autenticati possono inserire proposte" 
-ON public.destination_proposals FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Solo l'owner dell'evento o chi ha inserito la proposta può eliminarla" 
-ON public.destination_proposals FOR DELETE USING (
-    EXISTS (
-        SELECT 1 FROM public.events 
-        WHERE events.id = destination_proposals.event_id 
-        AND events.owner_id = auth.uid()
-    )
-);
-
-
--- 5. Tabella RISORSE & LINK (Resources)
-CREATE TABLE public.resources (
+-- 4. RISORSE & LINK
+CREATE TABLE IF NOT EXISTS public.resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -110,22 +66,12 @@ CREATE TABLE public.resources (
     url TEXT NOT NULL,
     category TEXT DEFAULT 'altro'::text NOT NULL
 );
-
--- RLS per Resources
 ALTER TABLE public.resources ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS res_all ON public.resources;
+CREATE POLICY res_all ON public.resources FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Tutti possono vedere le risorse dell'evento" 
-ON public.resources FOR SELECT USING (true);
-
-CREATE POLICY "Gli utenti autenticati possono inserire risorse" 
-ON public.resources FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-
-CREATE POLICY "Gli utenti autenticati possono cancellare risorse" 
-ON public.resources FOR DELETE WITH CHECK (auth.uid() IS NOT NULL);
-
-
--- 6. Tabella COMMENTI (Comments)
-CREATE TABLE public.comments (
+-- 5. COMMENTI
+CREATE TABLE IF NOT EXISTS public.comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -133,12 +79,16 @@ CREATE TABLE public.comments (
     text TEXT NOT NULL,
     timestamp TEXT NOT NULL
 );
-
--- RLS per Comments
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS comments_all ON public.comments;
+CREATE POLICY comments_all ON public.comments FOR ALL USING (true) WITH CHECK (true);
 
-CREATE POLICY "Tutti possono leggere i commenti dell'evento" 
-ON public.comments FOR SELECT USING (true);
-
-CREATE POLICY "Gli utenti autenticati possono inserire commenti" 
-ON public.comments FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+-- 6. REALTIME (aggiornamenti in diretta tra tutti i dispositivi)
+DO $$
+BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.events; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.responses; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.destination_proposals; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.resources; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.comments; EXCEPTION WHEN duplicate_object THEN NULL; END;
+END $$;

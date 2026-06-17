@@ -1,71 +1,70 @@
 # 👥 Organizzamici
 
-Organizzamici è una web-app moderna ed elegante progettata per pianificare ritrovi, weekend, grigliate ed eventi di gruppo con facilità. Supporta la votazione delle date ideali (con calcolo dell'ottimalità algoritmica), la gestione di alloggi/posti letto, il coordinamento delle auto (carpooling), la bacheca risorse e la bacheca dei commenti in tempo reale.
+Organizzamici è una web-app per organizzare ritrovi, weekend, cene ed eventi di gruppo tra amici. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando viaggi, impegni e turni di lavoro. Include carpooling, posti letto, destinazioni votabili dal gruppo, bacheca link e commenti.
 
 **🔴 Live demo:** [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici)
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
+---
 
-> ✨ **Restyling completo (giugno 2026):** nuova identità visiva "Aperitivo Notturno" (aurora animata, gradiente brand viola→fuchsia→corallo, glassmorphism, micro-animazioni), notifiche **toast** non bloccanti al posto degli `alert`, **modale di conferma**, **skeleton loader**, **confetti** ai momenti chiave ed **eliminazione evento** per l'organizzatore.
+## ✨ Come funziona (nessun login)
+
+1. **Crea l'evento** — scegli tipo, luogo e date (fisse o da votare).
+2. **Condividi il link** — mandalo su WhatsApp.
+3. **Gli amici votano** — aprono il link, scrivono il loro nome e votano. **Nessun account, nessuna email da confermare.**
+
+Tutto (voti, commenti, carpooling, destinazioni, risorse) è **condiviso in tempo reale** tra tutti su un database reale. L'identità è un id stabile per dispositivo + il nome scelto, salvati nel browser — niente password.
+
+> 🔒 **Modello di sicurezza:** "link segreto" (come Doodle). Chi ha il link di un evento può vederlo e modificarlo. Perfetto per cose tra amici; non pensato per dati sensibili.
 
 ---
 
-## 🌟 Funzionalità Principali
+## 🌟 Funzionalità
 
-- **📅 Flusso Smart Data Fissa & Voto**:
-  - **Data Fissa**: Se l'evento ha una data stabilita, la procedura guidata salta lo Step 2 del calendario e mostra direttamente la dashboard consolidata con logistica, auto e alloggi.
-  - **Date da Votare**: Permette agli invitati di votare le date di disponibilità su una griglia interattiva.
-- **🎯 Algoritmo Ottimizzazione Date**: Calcola e ordina le date migliori per massimizzare la presenza del gruppo e trovare la soluzione ottimale.
-- **🔒 Finalizzazione Data**: L'organizzatore può fissare una data come definitiva direttamente dall'ottimizzatore, disabilitando la votazione e convertendo la dashboard in modalità data singola.
-- **🚗 Coordinamento Trasporti**: Sistema di carpooling integrato con calcolo posti auto e passeggeri.
-- **🛏️ Gestione Posti Letto**: Monitoraggio della disponibilità degli alloggi per pianificare weekend e vacanze di gruppo.
-- **💬 Bacheca dei Commenti & Risorse**: Posta commenti al volo direttamente dalla dashboard e condividi link e info utili.
-- **🔄 Google OAuth & Email Login**: Autenticazione integrata (con risoluzione dei conflitti di redirect su client-side routing).
-- **💾 Modalità Emulata Zero-Config**: Se non viene configurato un database Supabase, l'app funziona immediatamente in locale salvando tutti i dati in modo persistente tramite `localStorage`.
+- **📅 Data fissa o date da votare** con griglia interattiva.
+- **🎯 Algoritmo di ottimizzazione**: calcola la data migliore pesando presenze, coesione del gruppo e sforzo di viaggio (tempi, ferie necessarie, posti letto).
+- **🔒 Finalizzazione data** dall'ottimizzatore (l'organizzatore fissa la data definitiva).
+- **🚗 Carpooling** con calcolo posti auto/passeggeri.
+- **🛏️ Gestione posti letto** per weekend e vacanze.
+- **🗺️ Destinazioni collaborative** votabili (❤️ Love / 👍 Like / 👎 No).
+- **💬 Bacheca commenti & risorse** in tempo reale.
+- **🎨 Tema a scelta** (Ambra / Lime / Teal) dall'header.
+- **💾 Modalità locale**: senza database configurato l'app funziona comunque salvando in `localStorage` (utile in sviluppo) + scenario demo su `/event/demo`.
 
 ---
 
 ## 🚀 Deployment
 
-L'app è già **online su GitHub Pages**: [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/). La configurazione Vite usa `base: './'` (percorsi relativi), quindi gli stessi file girano senza modifiche anche su Vercel, Netlify o qualsiasi hosting statico.
+Online su **GitHub Pages** (branch `gh-pages`). La build Vite usa `base: './'` (percorsi relativi), quindi gli stessi file girano anche su Vercel/Netlify o qualsiasi hosting statico.
 
-* **GitHub Pages**: la sorgente Pages è il branch `gh-pages`. Per ripubblicare dopo modifiche basta `npm run build` e caricare il contenuto di `dist/` su quel branch.
-* **Vercel**: [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) — importa il repository e fai il deploy.
-* **Netlify**: [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici) — deploy continuo da GitHub.
+Per ripubblicare dopo modifiche:
+```bash
+npm run build          # genera dist/ (con le credenziali da .env)
+# poi pubblica il contenuto di dist/ sul branch gh-pages
+```
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
 
 ---
 
-## 🛠️ Configurazione Supabase (Opzionale)
+## 🛠️ Configurazione database (Supabase)
 
-Se desideri salvare i dati in un database reale condiviso con i tuoi amici anziché utilizzare il database emulato in locale, segui questi passaggi:
+L'app live è già collegata a un progetto Supabase. Per usarne uno tuo:
 
 1. Crea un progetto gratuito su [Supabase](https://supabase.com/).
-2. Copia ed esegui il codice SQL presente nel file [`schema.sql`](file:///e:/PROGETTI/Organizzamici/schema.sql) nell'editor SQL (SQL Editor) di Supabase per creare le tabelle e impostare le policy RLS.
-3. Copia il file `.env.example` in `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-4. Configura le tue credenziali Supabase nel file `.env`:
+2. Esegui il contenuto di [`schema.sql`](schema.sql) nell'SQL Editor (crea le tabelle, le policy permissive e abilita il realtime).
+3. Copia `.env.example` in `.env` e inserisci le tue credenziali:
    ```env
    VITE_SUPABASE_URL=la_tua_supabase_url
    VITE_SUPABASE_ANON_KEY=la_tua_anon_key
    ```
-5. Su Supabase, abilita **Google** come Provider di Autenticazione sotto la sezione *Authentication -> Providers*. Aggiungi `https://<tuo-dominio-vercel-o-netlify>` come URL di redirect autorizzato.
+   (Il file `.env` è ignorato da git; la anon key è pubblica e viene inclusa nel build statico — è protetta dalle policy del database.)
 
 ---
 
-## 💻 Sviluppo Locale
+## 💻 Sviluppo locale
 
-1. Installa le dipendenze:
-   ```bash
-   npm install
-   ```
-2. Avvia il server di sviluppo locale:
-   ```bash
-   npm run dev
-   ```
-3. Avvia la build per produzione:
-   ```bash
-   npm run build
-   ```
+```bash
+npm install     # installa le dipendenze
+npm run dev     # server di sviluppo
+npm run build   # build di produzione
+```
