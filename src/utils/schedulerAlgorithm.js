@@ -1,57 +1,44 @@
 import { estimateTravelTime } from "./geoData";
 
-/**
- * Calcola il giorno della settimana (0 = Domenica, 6 = Sabato)
- */
-function getDayOfWeek(dateStr) {
-  const date = new Date(dateStr);
-  return date.getDay();
-}
+const norm = (s) => (s || "").trim().toLowerCase();
 
 /**
- * Calcola i giorni di ferie richiesti basandosi sul calendario di lavoro
- * PERSONALIZZATO di ciascun ospite.
- * 
- * @param {string} dateStr - Data dell'evento (AAAA-MM-GG)
- * @param {number} travelTime - Tempo di viaggio stimato in ore
- * @param {Array<number>} restDays - Giorni di riposo settimanali dell'ospite (0 = Dom, 6 = Sab)
+ * Giorni di ferie necessari, in base al calendario di lavoro dell'ospite.
+ * @param {string} dateStr  Data evento (AAAA-MM-GG)
+ * @param {number} travelTime  Ore di viaggio stimate
+ * @param {Array<number>} restDays  Giorni di riposo (0=Dom ... 6=Sab)
  */
 export function calculateLeaveDays(dateStr, travelTime, restDays = [6, 0]) {
-  if (travelTime === 0) return 0;
-  const dateObj = new Date(dateStr);
-  const day = dateObj.getDay(); // 0 = Dom, 1 = Lun, ..., 6 = Sab
-  
+  if (!travelTime || travelTime === 0) return 0;
+  const day = new Date(dateStr).getDay();
   const isRestDay = restDays.includes(day);
 
   if (isRestDay) {
-    // Il giorno dell'evento è un giorno di riposo per questo amico
-    return travelTime > 6.5 ? 1 : 0; // Solo viaggi lunghissimi/estero richiedono ferie
-  } else {
-    // Il giorno dell'evento è un giorno lavorativo per questo amico
-    if (travelTime <= 2) return 0.5; // Può partire dopo il lavoro prendendo solo mezza giornata
-    if (travelTime <= 5) return 1;   // Richiede un giorno intero
-    return 1.5;                      // Viaggio lungo: richiede andata e riposo
+    // Giorno di riposo: solo viaggi lunghissimi richiedono ferie
+    return travelTime > 6.5 ? 1 : 0;
   }
+  // Giorno lavorativo
+  if (travelTime <= 2) return 0.5; // mezza giornata
+  if (travelTime <= 5) return 1;
+  return 1.5;
 }
 
 /**
- * Calcola la varianza dei voti per determinare l'indice di coesione/accordo.
- * Evita situazioni polarizzate (metà gruppo felicissimo, metà scontento).
+ * Indice di coesione (0-100): quanto è uniforme l'entusiasmo del gruppo.
+ * Bassa varianza dei voti = alto accordo.
  */
 function calculateCohesionIndex(preferences) {
   if (preferences.length <= 1) return 100;
   const mean = preferences.reduce((a, b) => a + b, 0) / preferences.length;
-  const variance = preferences.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / preferences.length;
-  
-  // Più la varianza è bassa, più c'è coesione.
-  // Massimo scarto teorico di varianza con voti da 0 a 5 è circa 6.25.
-  // Trasformiamo in un indice da 0 (polarizzato) a 100 (accordo unanime)
-  const score = 100 - (variance / 6.25) * 100;
+  const variance = preferences.reduce((a, b) => a + (b - mean) ** 2, 0) / preferences.length;
+  const score = 100 - (variance / 6.25) * 100; // 6.25 = varianza max teorica (voti 0-5)
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 /**
- * Algoritmo principale per calcolare l'ottimizzazione delle date
+ * Ottimizzazione delle date candidate.
+ * Chi non ha ancora votato è "in attesa": NON viene contato come presente
+ * (così il punteggio riflette le disponibilità reali, non presunte).
  */
 export function optimizeDates(eventLocation, candidateDates, participants, responses) {
   if (!candidateDates || candidateDates.length === 0 || !participants || participants.length === 0) {
@@ -59,59 +46,55 @@ export function optimizeDates(eventLocation, candidateDates, participants, respo
   }
 
   const results = candidateDates.map((dateStr) => {
+    const day = new Date(dateStr).getDay();
+
     let isVetoed = false;
     let attendingCount = 0;
+    let pendingCount = 0;
     let totalUtility = 0;
-    const activePreferences = [];
-    
-    const individualDetails = [];
     let totalTravelTime = 0;
     let travelPenalties = 0;
     let totalLeaveDays = 0;
     let bedsNeededCount = 0;
+    const activePreferences = [];
+    const pendingNames = [];
+    const essentialPending = [];
+    const individualDetails = [];
 
     participants.forEach((p) => {
-      const pref = responses[p.name]?.[dateStr] !== undefined ? responses[p.name][dateStr] : 3; // default 3 = Disponibile
-      
-      const isAttending = pref > 0;
-      if (isAttending) {
+      const raw = responses[p.name]?.[dateStr];
+      const hasVoted = raw !== undefined && raw !== null;
+      const pref = hasVoted ? raw : null;
+      const isAttending = hasVoted && pref > 0;
+      const isLocal = norm(p.city) === norm(eventLocation);
+
+      const travel = estimateTravelTime(p.city, eventLocation, p.transportMode || "auto");
+      const restDays = p.restDays || [6, 0];
+      const leaveDays = isAttending ? calculateLeaveDays(dateStr, travel.time, restDays) : 0;
+      const needsBed = p.needsBed !== undefined ? p.needsBed : (!isLocal && travel.time > 0);
+
+      // Veto solo se un essenziale ha votato esplicitamente "non posso"
+      if (p.isEssential && hasVoted && pref === 0) isVetoed = true;
+
+      if (!hasVoted) {
+        pendingCount++;
+        pendingNames.push(p.name);
+        if (p.isEssential) essentialPending.push(p.name);
+      } else if (isAttending) {
         attendingCount++;
         totalUtility += pref;
         activePreferences.push(pref);
-        
-        // Controlla se ha bisogno di un letto (default true per chi viene da fuori, impostabile dal guest)
-        const needsBed = p.needsBed !== undefined ? p.needsBed : (p.city !== eventLocation);
-        if (needsBed) {
-          bedsNeededCount++;
-        }
-      }
+        if (needsBed) bedsNeededCount++;
 
-      if (p.isEssential && pref === 0) {
-        isVetoed = true;
-      }
-
-      const travel = estimateTravelTime(p.city, eventLocation, p.transportMode || "auto");
-      
-      // Usa i giorni di riposo dell'utente (standard [6,0] = sab/dom)
-      const guestRestDays = p.restDays || [6, 0];
-      const leaveDays = isAttending ? calculateLeaveDays(dateStr, travel.time, guestRestDays) : 0;
-      
-      if (isAttending) {
         totalTravelTime += travel.time;
         totalLeaveDays += leaveDays;
-        
-        const dateObj = new Date(dateStr);
-        const day = dateObj.getDay();
-        const isRestDay = guestRestDays.includes(day);
 
-        // Penalità di viaggio personalizzata in base all'orario lavorativo dell'utente
+        const isRestDay = restDays.includes(day);
         let penalty = 0;
         if (travel.time > 1) {
-          if (!isRestDay) {
-            penalty = travel.time * 2.8 + leaveDays * 18; // penalità pesante se lavora quel giorno
-          } else {
-            penalty = travel.time * 0.8 + leaveDays * 5;  // penalità leggera se è a riposo
-          }
+          penalty = isRestDay
+            ? travel.time * 0.8 + leaveDays * 5    // a riposo: viaggio leggero
+            : travel.time * 2.8 + leaveDays * 18;  // lavora quel giorno: pesante
         }
         travelPenalties += penalty;
       }
@@ -120,76 +103,66 @@ export function optimizeDates(eventLocation, candidateDates, participants, respo
         name: p.name,
         city: p.city,
         preference: pref,
+        hasVoted,
+        isAttending,
+        isLocal,
+        transportMode: p.transportMode || null,
+        hasCar: !!p.hasCar,
+        carSeats: p.carSeats || 0,
         travelTime: travel.time,
         travelDesc: travel.desc,
         leaveDays,
-        restDays: guestRestDays,
-        needsBed: p.needsBed !== undefined ? p.needsBed : (p.city !== eventLocation),
-        isAttending
+        restDays,
+        needsBed,
       });
     });
 
-    const attendanceRate = attendingCount / participants.length;
-    const maxPossibleUtility = participants.length * 5;
-    const utilityRate = totalUtility / maxPossibleUtility;
-
-    // Calcolo Coesione Sociale (Accordo omogeneo)
+    const invited = participants.length;
+    const attendanceRate = invited > 0 ? attendingCount / invited : 0;
+    const maxUtility = invited * 5;
+    const utilityRate = maxUtility > 0 ? totalUtility / maxUtility : 0;
     const cohesionIndex = calculateCohesionIndex(activePreferences);
 
-    // Punteggio base (0-100) basato su presenze, utilità e coesione
-    let baseScore = (attendanceRate * 50) + (utilityRate * 35) + ((cohesionIndex / 100) * 15);
-    const avgTravelPenalty = participants.length > 0 ? (travelPenalties / participants.length) : 0;
-    
+    const baseScore = attendanceRate * 50 + utilityRate * 35 + (cohesionIndex / 100) * 15;
+    const avgTravelPenalty = attendingCount > 0 ? travelPenalties / attendingCount : 0;
     let finalScore = baseScore - avgTravelPenalty;
-
-    if (isVetoed || attendingCount === 0) {
-      finalScore = 0;
-    }
-
+    if (isVetoed || attendingCount === 0) finalScore = 0;
     finalScore = Math.max(0, Math.min(100, Math.round(finalScore)));
 
-    // Motivazioni intelligenti dettagliate
     const reasons = [];
     if (isVetoed) {
-      reasons.push("🔴 ESCLUSA: Un partecipante essenziale ha inserito un veto.");
+      reasons.push("🔴 ESCLUSA: un partecipante essenziale non può in questa data.");
     } else {
-      if (attendingCount === participants.length) {
-        reasons.push("🟢 Presenza massima: 100% degli invitati presenti.");
+      if (attendingCount === invited) {
+        reasons.push("🟢 Presenza massima: tutti gli invitati possono.");
       } else if (attendanceRate >= 0.75) {
-        reasons.push(`🟢 Alta partecipazione: ${attendingCount} su ${participants.length} presenti.`);
+        reasons.push(`🟢 Alta partecipazione: ${attendingCount} su ${invited} possono.`);
       }
-
-      if (cohesionIndex >= 85) {
-        reasons.push("🤝 Alto accordo di gruppo: la data piace in modo uniforme a tutti, senza scontenti.");
+      if (cohesionIndex >= 85 && attendingCount > 1) {
+        reasons.push("🤝 Accordo uniforme: la data piace a tutti senza scontenti.");
       } else if (cohesionIndex < 50 && attendingCount > 2) {
-        reasons.push("⚠️ Data polarizzata: piace molto ad alcuni ma costringe altri a grossi sacrifici.");
+        reasons.push("⚠️ Data polarizzata: entusiasma alcuni ma è un sacrificio per altri.");
       }
-
-      // Evidenzia chi deve prendere più ferie
-      const highLeaveUsers = individualDetails.filter(d => d.isAttending && d.leaveDays >= 1);
-      if (highLeaveUsers.length > 0) {
-        const names = highLeaveUsers.map(t => `${t.name} (${t.leaveDays}gg)`).join(", ");
-        reasons.push(`⚠️ Ferie necessarie per: ${names}.`);
+      const highLeave = individualDetails.filter((d) => d.isAttending && d.leaveDays >= 1);
+      if (highLeave.length > 0) {
+        reasons.push(`⚠️ Ferie necessarie: ${highLeave.map((t) => `${t.name} (${t.leaveDays}gg)`).join(", ")}.`);
       }
-      
-      // Controlla se qualcuno lavora durante il weekend standard ma è libero qui
-      const shiftWorkersFree = individualDetails.filter(d => d.isAttending && !d.restDays.includes(6) && new Date(dateStr).getDay() === 6);
-      if (shiftWorkersFree.length > 0) {
-        // ad es. chi lavora di sabato ma in questa data ha ferie o riposo
+      if (essentialPending.length > 0) {
+        reasons.push(`⏳ Manca il voto di chi è indispensabile: ${essentialPending.join(", ")}.`);
+      } else if (pendingCount > 0) {
+        reasons.push(`⏳ In attesa di ${pendingCount} ${pendingCount === 1 ? "voto" : "voti"}.`);
       }
     }
 
-    // Calcolo bilancio/equità del viaggio
-    const travelTimesList = individualDetails.filter(d => d.isAttending).map(d => d.travelTime);
-    let travelBalanceDesc = "Sforzo bilanciato.";
-    if (travelTimesList.length > 0) {
-      const maxTravel = Math.max(...travelTimesList);
-      const minTravel = Math.min(...travelTimesList);
-      if (maxTravel - minTravel > 4.5) {
-        const longestTraveler = individualDetails.find(d => d.travelTime === maxTravel)?.name || "";
-        travelBalanceDesc = `⚠️ Sforzo sbilanciato: ${longestTraveler} deve viaggiare per ${maxTravel} ore, mentre altri sono locali.`;
-      } else {
-        travelBalanceDesc = "🟢 Sforzo distribuito equamente nel gruppo.";
+    // Equità dello sforzo di viaggio (solo tra chi viaggia davvero)
+    const travelTimes = individualDetails.filter((d) => d.isAttending && d.travelTime > 0).map((d) => d.travelTime);
+    let travelBalanceDesc = travelTimes.length === 0 ? "🟢 Tutti vicini o già sul posto." : "🟢 Sforzo di viaggio distribuito.";
+    if (travelTimes.length > 0) {
+      const maxT = Math.max(...travelTimes);
+      const minT = Math.min(...travelTimes);
+      if (maxT - minT > 4.5) {
+        const who = individualDetails.find((d) => d.travelTime === maxT)?.name || "";
+        travelBalanceDesc = `⚠️ Sforzo sbilanciato: ${who} viaggia ~${maxT}h, gli altri molto meno.`;
       }
     }
 
@@ -197,7 +170,9 @@ export function optimizeDates(eventLocation, candidateDates, participants, respo
       date: dateStr,
       score: finalScore,
       attendingCount,
-      totalParticipants: participants.length,
+      pendingCount,
+      pendingNames,
+      totalParticipants: invited,
       attendanceRate,
       totalUtility,
       isVetoed,
@@ -207,9 +182,98 @@ export function optimizeDates(eventLocation, candidateDates, participants, respo
       avgTravelTime: attendingCount > 0 ? Math.round((totalTravelTime / attendingCount) * 10) / 10 : 0,
       totalLeaveDays: Math.round(totalLeaveDays * 10) / 10,
       travelBalanceDesc,
-      details: individualDetails
+      details: individualDetails,
     };
   });
 
   return results.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Logica carpooling CONDIVISA e coerente in tutta l'app.
+ * L'auto compare SOLO quando serve davvero: si considerano unicamente i
+ * partecipanti presenti che si spostano in auto e non sono già sul posto.
+ *
+ * - driver  : va in auto, ha l'auto e offre posti (carSeats > 0)
+ * - rider   : va in auto ma senza auto propria → gli serve un passaggio
+ * Chi va in treno/aereo o è locale NON entra nel carpooling.
+ */
+export function computeCarpool(participants, responses, dateStr, eventLocation) {
+  const relevant = (participants || []).filter((p) => {
+    // se c'è una data, considera solo chi è presente quel giorno
+    if (dateStr && responses) {
+      const v = responses[p.name]?.[dateStr];
+      if (!(v > 0)) return false;
+    }
+    // i locali (stessa città dell'evento) sono già sul posto: niente carpooling
+    if (eventLocation && norm(p.city) === norm(eventLocation)) return false;
+    return true;
+  });
+
+  const drivers = [];
+  const riders = [];
+  let totalSeats = 0;
+
+  relevant.forEach((p) => {
+    if (p.transportMode !== "auto") return; // solo chi si muove in auto
+    if (p.hasCar && (p.carSeats || 0) > 0) {
+      drivers.push(p);
+      totalSeats += p.carSeats || 0;
+    } else if (p.hasCar) {
+      drivers.push(p); // ha l'auto ma 0 posti dichiarati
+    } else {
+      riders.push(p); // gli serve un passaggio
+    }
+  });
+
+  const relevantToCar = drivers.length > 0 || riders.length > 0;
+  return {
+    drivers,
+    riders,
+    totalSeats,
+    ridersCount: riders.length,
+    enoughSeats: totalSeats >= riders.length,
+    relevant: relevantToCar, // se false, NON mostrare la sezione auto
+  };
+}
+
+/**
+ * Consiglio di viaggio per una persona, inquadrato sul MEZZO REALE che usa
+ * (non si assume mai l'auto). Per l'aereo/treno cita il tragitto locale.
+ * @param {object} d  oggetto details (travelTime, travelDesc, transportMode, restDays, isLocal)
+ * @param {string} dateStr  data dell'evento
+ */
+export function getTravelAdvice(d, dateStr) {
+  const t = d.travelTime;
+  if (!t || t === 0 || d.isLocal) {
+    return "📍 Già sul posto: nessun viaggio necessario.";
+  }
+  const restDays = d.restDays || [6, 0];
+  const isRest = restDays.includes(new Date(dateStr).getDay());
+  const desc = (d.travelDesc || "").toLowerCase();
+  const isFlight = d.transportMode === "aereo" || desc.includes("volo");
+  const isTrain = d.transportMode === "treno" || desc.includes("treno");
+
+  if (isFlight) {
+    const base = `✈️ Volo (~${t}h inclusi i controlli). Raggiungi l'aeroporto in auto o coi mezzi.`;
+    return isRest
+      ? `${base} Sei a riposo: conviene partire la sera prima.`
+      : `${base} Giorno lavorativo: metti in conto ~1 giorno di ferie.`;
+  }
+  if (isTrain) {
+    const hs = desc.includes("alta velocità");
+    const base = hs ? `🚄 Treno Alta Velocità (~${t}h).` : `🚆 Treno (~${t}h).`;
+    return isRest
+      ? `${base} Sei a riposo: 0 ferie, parti la mattina.`
+      : `${base} Giorno lavorativo: mezza/una giornata di ferie.`;
+  }
+  // Auto
+  if (t > 4.5) {
+    return isRest
+      ? `🚗 Auto (~${t}h, viaggio lungo). A riposo: meglio partire il pomeriggio prima.`
+      : `🚗 Auto (~${t}h, viaggio lungo). Giorno lavorativo: serve ~1 giorno di ferie.`;
+  }
+  return isRest
+    ? `🚗 Auto (~${t}h). A riposo: parti la mattina, arrivi per pranzo.`
+    : `🚗 Auto (~${t}h). Giorno lavorativo: serve mezza giornata di ferie.`;
 }

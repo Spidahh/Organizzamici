@@ -219,12 +219,21 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
           </div>
 
           <div className="form-group">
-            <label>Città di Riferimento Logistico</label>
-            <select value={location} onChange={(e) => setLocation(e.target.value)}>
-              {Object.keys(CITIES).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <label>Città del ritrovo (per calcolare i viaggi)</label>
+            <input
+              list="oa-city-list"
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Scrivi una città qualsiasi (es. Matera, Lisbona, Berlino...)"
+              required
+            />
+            <datalist id="oa-city-list">
+              {Object.keys(CITIES).map((c) => (<option key={c} value={c} />))}
+            </datalist>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              Funziona con qualunque città del mondo: serve a stimare distanze e tempi di viaggio.
+            </span>
           </div>
 
           {(eventType === "viaggio" || eventType === "altro") && (
