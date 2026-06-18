@@ -607,7 +607,7 @@ function CreateEvent({ user, navigate }) {
 // ----------------------------------------------------
 function EventDashboard({ user, navigate }) {
   const { id } = useParams();
-  const [isDemo, setIsDemo] = useState(id === "demo");
+  const [isDemo] = useState(false); // demo disattivata: l'app è solo reale
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState(null);
   const [responses, setResponses] = useState([]);
