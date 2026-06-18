@@ -5,7 +5,9 @@ import EventCreator from "./components/EventCreator";
 import AvailabilitySelector from "./components/AvailabilitySelector";
 import ResultsOptimizer from "./components/ResultsOptimizer";
 import Auth from "./components/Auth";
-import { optimizeDates } from "./utils/schedulerAlgorithm";
+import { optimizeDates, computeCarpool, getTravelAdvice } from "./utils/schedulerAlgorithm";
+import { geocodeCity, getCoords } from "./utils/geoData";
+import { toast, confirmDialog, celebrate, Skeleton } from "./ui";
 
 // Shared date formatters
 const formatDateShort = (dateStr) => {
@@ -64,6 +66,38 @@ const DEMO_SCENARIO = {
     { id: 2, author: "Elena", text: "Preferisco Giugno. Da Londra ho voli migliori.", timestamp: "14:35" }
   ]
 };
+
+// Selettore del colore accento (tema). La scelta è dell'utente e viene
+// salvata in localStorage e applicata su <html data-theme="...">.
+const THEMES = [
+  { id: "amber", cls: "theme-dot-amber", label: "Oro / ambra" },
+  { id: "lime", cls: "theme-dot-lime", label: "Lime" },
+  { id: "teal", cls: "theme-dot-teal", label: "Teal turchese" },
+];
+
+function ThemeSwitch() {
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("app_theme") || "teal"; } catch { return "teal"; }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("app_theme", theme); } catch { /* no-op */ }
+  }, [theme]);
+  return (
+    <div className="theme-switch" role="group" aria-label="Colore dell'app">
+      {THEMES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={`theme-dot ${t.cls} ${theme === t.id ? "active" : ""}`}
+          aria-label={`Tema ${t.label}`}
+          title={t.label}
+          onClick={() => setTheme(t.id)}
+        />
+      ))}
+    </div>
+  );
+}
 
 // Componente Root principale che avvolge l'app in HashRouter
 export default function App() {
@@ -162,7 +196,39 @@ function AppContent() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    toast.info("A presto! 👋");
     navigate("/");
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    const ok = await confirmDialog({
+      title: "Eliminare l'evento?",
+      message: "L'evento e tutte le risposte degli amici verranno rimossi definitivamente. L'azione non è reversibile.",
+      confirmText: "Sì, elimina",
+      danger: true,
+    });
+    if (!ok) return;
+
+    if (supabase.isMock) {
+      try {
+        const events = JSON.parse(localStorage.getItem("mock_db_events") || "[]").filter((e) => e.id !== eventId);
+        localStorage.setItem("mock_db_events", JSON.stringify(events));
+        const responses = JSON.parse(localStorage.getItem("mock_db_responses") || "[]").filter((r) => r.event_id !== eventId);
+        localStorage.setItem("mock_db_responses", JSON.stringify(responses));
+        toast.success("Evento eliminato");
+        fetchUserEvents(user.id);
+      } catch (e) {
+        toast.error("Errore durante l'eliminazione");
+      }
+      return;
+    }
+
+    const { error } = await supabase.from("events").delete().eq("id", eventId);
+    if (error) toast.error("Errore eliminazione: " + error.message);
+    else {
+      toast.success("Evento eliminato");
+      fetchUserEvents(user.id);
+    }
   };
 
   return (
@@ -175,6 +241,7 @@ function AppContent() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <ThemeSwitch />
           {user ? (
             <>
               <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }} className="user-email-header">
@@ -197,7 +264,7 @@ function AppContent() {
       {/* Area Contenuto con Router */}
       <main style={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <Routes>
-          <Route path="/" element={<Home user={user} myEvents={myEvents} myParticipations={myParticipations} loading={loadingUserEvents} navigate={navigate} />} />
+          <Route path="/" element={<Home user={user} myEvents={myEvents} myParticipations={myParticipations} loading={loadingUserEvents} navigate={navigate} onDeleteEvent={handleDeleteEvent} />} />
           <Route path="/login" element={<LoginPage user={user} navigate={navigate} />} />
           <Route path="/create" element={<CreateEvent user={user} navigate={navigate} />} />
           <Route path="/event/:id" element={<EventDashboard user={user} navigate={navigate} />} />
@@ -214,7 +281,7 @@ function AppContent() {
 // ----------------------------------------------------
 // PAGINA 1: LANDING & DASHBOARD UTENTE (HOME)
 // ----------------------------------------------------
-function Home({ user, myEvents, myParticipations, loading, navigate }) {
+function Home({ user, myEvents, myParticipations, loading, navigate, onDeleteEvent }) {
   return (
     <div style={{ width: "100%" }}>
       {user ? (
@@ -231,7 +298,15 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
           </div>
 
           {loading ? (
-            <div style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>⏳ Caricamento eventi in corso...</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="glass-panel" style={{ padding: "16px", animationDelay: `${i * 80}ms` }}>
+                  <Skeleton width="35%" height={10} />
+                  <Skeleton width="70%" height={18} style={{ marginTop: 14 }} />
+                  <Skeleton width="50%" height={12} style={{ marginTop: 10 }} />
+                </div>
+              ))}
+            </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               {/* Eventi creati come organizzatore */}
@@ -246,24 +321,34 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
                     {myEvents.map(e => (
-                      <Link to={`/event/${e.id}`} key={e.id} className="result-card" style={{ padding: "16px", borderRadius: "var(--radius-md)", background: "var(--bg-card)", border: "1px solid var(--border-color)", textDecoration: "none", display: "block" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "99px", background: "var(--color-preferred-bg)", color: "var(--color-preferred)", fontWeight: "700" }}>
-                            {(e.event_type || e.eventType || "altro").toUpperCase()}
-                          </span>
-                          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                            {(e.selected_dates || e.selectedDates || []).length === 1 ? (
-                              `📅 ${formatDateShort((e.selected_dates || e.selectedDates)[0])}`
-                            ) : (
-                              `${(e.selected_dates || e.selectedDates || []).length} date prop.`
-                            )}
-                          </span>
-                        </div>
-                        <h4 style={{ margin: "10px 0 4px 0", fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{e.title}</h4>
-                        <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          📍 {e.custom_location || e.customLocation || e.location}
-                        </p>
-                      </Link>
+                      <div key={e.id} style={{ position: "relative" }}>
+                        <button
+                          onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); onDeleteEvent && onDeleteEvent(e.id); }}
+                          title="Elimina evento"
+                          className="btn btn-danger"
+                          style={{ position: "absolute", top: "10px", right: "10px", padding: "4px 9px", fontSize: "12px", zIndex: 2, lineHeight: 1 }}
+                        >
+                          🗑️
+                        </button>
+                        <Link to={`/event/${e.id}`} className="result-card" style={{ padding: "16px", paddingRight: "48px", borderRadius: "var(--radius-md)", background: "var(--bg-inset)", border: "1px solid var(--border-color)", textDecoration: "none", display: "block" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <span className="badge chip-gradient" style={{ fontSize: "10px" }}>
+                              {(e.event_type || e.eventType || "altro").toUpperCase()}
+                            </span>
+                            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                              {(e.selected_dates || e.selectedDates || []).length === 1 ? (
+                                `📅 ${formatDateShort((e.selected_dates || e.selectedDates)[0])}`
+                              ) : (
+                                `${(e.selected_dates || e.selectedDates || []).length} date prop.`
+                              )}
+                            </span>
+                          </div>
+                          <h4 style={{ margin: "10px 0 4px 0", fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{e.title}</h4>
+                          <p style={{ margin: 0, fontSize: "12px", color: "var(--text-secondary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            📍 {e.custom_location || e.customLocation || e.location}
+                          </p>
+                        </Link>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -308,40 +393,54 @@ function Home({ user, myEvents, myParticipations, loading, navigate }) {
         </div>
       ) : (
         // HERO LANDING PER UTENTE NON LOGGATO
-        <div className="glass-panel" style={{ padding: "50px 40px", maxWidth: "650px", margin: "0 auto", textAlign: "center" }}>
-          <div style={{ fontSize: "56px", marginBottom: "20px" }}>🏡</div>
-          <h1 style={{ fontSize: "36px", marginBottom: "12px", letterSpacing: "-0.5px", fontWeight: "800", color: "var(--text-primary)" }}>
-            Organizza incontri tra amici senza stress
-          </h1>
-          <p className="subtitle" style={{ fontSize: "15px", marginBottom: "36px", color: "var(--text-secondary)", maxWidth: "550px", margin: "0 auto 36px" }}>
-            Crea il tuo evento e condividi il link. I tuoi amici partecipano e votano in tempo reale da qualsiasi dispositivo. Trova istantaneamente la data ottimale incrociando viaggi, impegni e turni di lavoro.
-          </p>
-
-          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => navigate("/login?redirect=/create")} className="btn btn-primary" style={{ padding: "12px 30px", fontSize: "15px" }}>
-              Crea il tuo Evento ➔
-            </button>
-            <button onClick={() => navigate("/event/demo")} className="btn btn-secondary" style={{ padding: "12px 24px", fontSize: "15px" }}>
-              🛠️ Prova Scenario Demo Locale
-            </button>
+        <div style={{ width: "100%" }}>
+          {/* HERO */}
+          <div style={{ textAlign: "center", maxWidth: "760px", margin: "0 auto", padding: "16px 0 8px" }}>
+            <div className="float-anim" style={{ fontSize: "66px", marginBottom: "16px", filter: "drop-shadow(0 14px 34px rgba(var(--accent-rgb),0.55))" }}>🥂</div>
+            <span className="badge chip-gradient" style={{ fontSize: "12px" }}>✨ Basta mille chat di gruppo per decidere una data</span>
+            <h1 style={{ fontSize: "clamp(32px, 6.2vw, 56px)", lineHeight: 1.05, margin: "18px 0 16px" }}>
+              Organizza ritrovi tra amici<br /><span className="text-gradient">senza stress</span>
+            </h1>
+            <p style={{ fontSize: "17px", color: "var(--text-secondary)", maxWidth: "560px", margin: "0 auto 30px" }}>
+              Crea l'evento e condividi un link. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando <strong style={{ color: "var(--text-primary)" }}>viaggi, impegni e turni di lavoro</strong>.
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+              <button onClick={() => navigate("/login?redirect=/create")} className="btn btn-primary" style={{ padding: "14px 32px", fontSize: "16px" }}>
+                Crea il tuo Evento ➔
+              </button>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "16px" }}>
+              Gratis · Nessuna carta richiesta · Funziona su ogni telefono
+            </p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "48px", textAlign: "left", borderTop: "1px solid var(--border-color)", paddingTop: "30px" }}>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🔑 Profili Sicuri</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Registrati gratis con la tua email per proteggere i tuoi dati ed evitare sostituzioni di persona.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>⚡ Realtime Sincronizzato</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Vedi istantaneamente i voti, i commenti e i link utili aggiunti dagli altri partecipanti su qualunque telefono.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🚗 Carpooling & Logistica</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>Dichiara la tua disponibilità di auto e posti per viaggiare insieme e risparmiare.</p>
-            </div>
-            <div>
-              <h4 style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "14px", marginBottom: "4px" }}>🏆 Graduatorie Automatiche</h4>
-              <p style={{ color: "var(--text-secondary)", fontSize: "12px", margin: 0 }}>L'algoritmo valuta la coesione sociale e lo sforzo di viaggio per trovare la data e la destinazione perfetta.</p>
+          {/* FEATURE GRID */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "18px", marginTop: "44px" }}>
+            {[
+              { icon: "🗳️", title: "Voti in tempo reale", desc: "Gli amici scelgono le date da qualsiasi telefono. Tu vedi tutto aggiornarsi all'istante." },
+              { icon: "🧠", title: "Data ottimale calcolata", desc: "L'algoritmo valuta presenze, coesione del gruppo e sforzo di viaggio per suggerire il giorno perfetto." },
+              { icon: "🚗", title: "Carpooling & posti letto", desc: "Chi ha l'auto, quanti posti, chi dorme dove: la logistica si organizza da sola." },
+              { icon: "🗺️", title: "Mete votate dal gruppo", desc: "Proponi destinazioni e lascia votare gli amici con ❤️ Love, 👍 Like o 👎 No." },
+            ].map((f, i) => (
+              <div key={i} className="glass-panel" style={{ padding: "22px", animationDelay: `${i * 90}ms` }}>
+                <div style={{ width: "46px", height: "46px", borderRadius: "13px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", background: "var(--brand-grad-soft)", border: "1px solid var(--border-glow)", marginBottom: "14px" }}>{f.icon}</div>
+                <h4 style={{ fontSize: "16px", fontWeight: "700", marginBottom: "6px" }}>{f.title}</h4>
+                <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* COME FUNZIONA */}
+          <div className="glass-panel" style={{ marginTop: "28px", padding: "30px" }}>
+            <h3 style={{ textAlign: "center", marginBottom: "24px" }}>Come funziona, in 3 passi</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
+              {[["1", "Crea l'evento", "Scegli tipo, luogo e date — fisse o da votare."], ["2", "Condividi il link", "Mandalo su WhatsApp: gli amici votano in 10 secondi."], ["3", "Partite insieme", "Vedi la data migliore, carpooling e logistica già pronti."]].map(([n, t, d]) => (
+                <div key={n} style={{ textAlign: "center" }}>
+                  <div style={{ width: "44px", height: "44px", margin: "0 auto 12px", borderRadius: "50%", background: "var(--brand-grad)", color: "#07221d", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "19px", fontFamily: "var(--font-display)", boxShadow: "0 8px 20px -6px rgba(var(--accent-rgb),0.6)" }}>{n}</div>
+                  <h4 style={{ fontSize: "15px", fontWeight: "700", marginBottom: "4px" }}>{t}</h4>
+                  <p style={{ color: "var(--text-secondary)", fontSize: "13px", margin: 0 }}>{d}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -373,9 +472,9 @@ function LoginPage({ user, navigate }) {
 function CreateEvent({ user, navigate }) {
   const [step, setStep] = useState(1);
   const [eventDetails, setEventDetails] = useState({
-    title: "Ritrovo Amici",
-    description: "Inserisci qui le note o il programma dell'evento!",
-    customLocation: "Villa La Novellina (Chianti)",
+    title: "",
+    description: "",
+    customLocation: "",
     location: "Firenze",
     bedsAvailable: 4,
     eventType: "weekend",
@@ -437,6 +536,8 @@ function CreateEvent({ user, navigate }) {
         };
         localStorage.setItem("mock_db_responses", JSON.stringify([...mockResponses, newResponse]));
 
+        celebrate();
+        toast.success("Condividi il link con gli amici!", "Evento creato 🎉");
         navigate(`/event/${newId}`);
         return;
       }
@@ -460,7 +561,7 @@ function CreateEvent({ user, navigate }) {
         .single();
 
       if (error) {
-        alert("Errore nella creazione dell'evento: " + error.message);
+        toast.error("Errore nella creazione dell'evento: " + error.message);
         return;
       }
 
@@ -480,6 +581,8 @@ function CreateEvent({ user, navigate }) {
           votes: updatedDetails.selectedDates.reduce((acc, date) => ({ ...acc, [date]: 5 }), {})
         });
 
+      celebrate();
+      toast.success("Condividi il link con gli amici!", "Evento creato 🎉");
       navigate(`/event/${data.id}`);
     }
   };
@@ -504,7 +607,7 @@ function CreateEvent({ user, navigate }) {
 // ----------------------------------------------------
 function EventDashboard({ user, navigate }) {
   const { id } = useParams();
-  const [isDemo, setIsDemo] = useState(id === "demo");
+  const [isDemo] = useState(false); // demo disattivata: l'app è solo reale
   const [loading, setLoading] = useState(true);
   const [eventData, setEventData] = useState(null);
   const [responses, setResponses] = useState([]);
@@ -521,6 +624,10 @@ function EventDashboard({ user, navigate }) {
   // Per conservare i dati demo in React state se stiamo provando la demo
   const [demoState, setDemoState] = useState(null);
   const [dashboardCommentText, setDashboardCommentText] = useState("");
+
+  // Versione che si incrementa quando finisce il geocoding di nuove città,
+  // così i calcoli di viaggio si aggiornano con le distanze reali.
+  const [geoVersion, setGeoVersion] = useState(0);
 
   // Calcola il nome utente di default
   const defaultName = isDemo 
@@ -731,24 +838,9 @@ function EventDashboard({ user, navigate }) {
   }, [mappedData]);
 
   const carpoolStats = React.useMemo(() => {
-    if (!mappedData) return { drivers: [], totalSeats: 0, autoPassengers: 0, enoughSeats: true };
-    let drivers = [];
-    let totalSeats = 0;
-    let autoPassengers = 0;
-    mappedData.participants.forEach(p => {
-      if (p.hasCar) {
-        drivers.push(p);
-        totalSeats += (p.carSeats || 0);
-      } else if (p.transportMode === "auto") {
-        autoPassengers++;
-      }
-    });
-    return {
-      drivers,
-      totalSeats,
-      autoPassengers,
-      enoughSeats: totalSeats >= autoPassengers
-    };
+    if (!mappedData) return { drivers: [], riders: [], totalSeats: 0, ridersCount: 0, enoughSeats: true, relevant: false };
+    const singleDate = mappedData.event.selectedDates?.[0];
+    return computeCarpool(mappedData.participants, mappedData.responsesMap, singleDate, mappedData.event.location);
   }, [mappedData]);
 
   const rankedDestinations = React.useMemo(() => {
@@ -770,7 +862,7 @@ function EventDashboard({ user, navigate }) {
   const optimizedList = React.useMemo(() => {
     if (!mappedData) return [];
     return optimizeDates(mappedData.event.location, mappedData.event.selectedDates, mappedData.participants, mappedData.responsesMap);
-  }, [mappedData]);
+  }, [mappedData, geoVersion]);
 
   const selectedDetails = React.useMemo(() => {
     if (!mappedData || mappedData.event.selectedDates.length === 0) return null;
@@ -778,50 +870,41 @@ function EventDashboard({ user, navigate }) {
     return optimizedList.find((d) => d.date === activeDate);
   }, [mappedData, optimizedList]);
 
+  // Geocoding automatico: risolve in coordinate la città dell'evento e quelle
+  // dei partecipanti non ancora note, poi forza il ricalcolo delle distanze.
+  useEffect(() => {
+    if (!mappedData) return;
+    const cities = new Set();
+    if (mappedData.event.location) cities.add(mappedData.event.location);
+    mappedData.participants.forEach((p) => { if (p.city) cities.add(p.city); });
+    const missing = [...cities].filter((c) => !getCoords(c));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const c of missing) {
+        await geocodeCity(c);
+        if (cancelled) return;
+      }
+      if (!cancelled) setGeoVersion((v) => v + 1);
+    })();
+    return () => { cancelled = true; };
+  }, [mappedData]);
 
 
-  const getTravelAdvice = (detailsObj, dateStr) => {
-    const time = detailsObj.travelTime;
-    const desc = detailsObj.travelDesc;
-    const restDays = detailsObj.restDays || [6, 0];
-    const eventDayOfWeek = new Date(dateStr).getDay();
-    const isUserRestDay = restDays.includes(eventDayOfWeek);
-
-    if (time === 0) {
-      return "📍 Locale. Già sul posto. Nessun viaggio richiesto.";
-    }
-    if (desc.includes("aereo")) {
-      let base = `✈️ Volo aereo (~${time}h totali con controlli).`;
-      if (isUserRestDay) {
-        return `${base} Giorno di riposo per te: ideale partire la sera prima per evitare stanchezza.`;
-      } else {
-        return `${base} Giorno lavorativo: richiede 1.5 giorni di ferie per coprire andata e imbarco diurno.`;
-      }
-    }
-    if (desc.includes("Alta Velocità")) {
-      if (isUserRestDay) {
-        return `🚄 Treno Alta Velocità. Consigliato treno delle 08:30 (arrivo in ~${time}h). Sei a riposo: 0 ferie.`;
-      } else {
-        return `🚄 Treno Alta Velocità. È un tuo giorno lavorativo: consigliata partenza nel pomeriggio con mezza giornata di ferie.`;
-      }
-    }
-    if (time > 4.5) {
-      if (isUserRestDay) {
-        return `🚗 Viaggio in auto lungo (~${time}h). Essendo a riposo, consigliata partenza il pomeriggio prima per riposarsi.`;
-      } else {
-        return `🚗 Auto (~${time}h). È tuo giorno lavorativo: viaggio molto pesante, richiede 1-2 giorni di ferie.`;
-      }
-    } else {
-      if (isUserRestDay) {
-        return `🚗 Auto (~${time}h). Sei a riposo: partenza ore 09:00, arrivo per pranzo. Rientro il giorno successivo.`;
-      } else {
-        return `🚗 Auto (~${time}h). Lavori in questo giorno: richiede ferie pomeridiane per viaggiare in sicurezza.`;
-      }
-    }
-  };
 
   if (loading) {
-    return <div style={{ padding: "40px", color: "var(--text-secondary)" }}>⏳ Caricamento ritrovo in corso...</div>;
+    return (
+      <div className="glass-panel" style={{ maxWidth: "900px", margin: "0 auto", width: "100%" }}>
+        <Skeleton width="30%" height={12} />
+        <Skeleton width="60%" height={26} style={{ marginTop: 14 }} />
+        <Skeleton width="45%" height={14} style={{ marginTop: 10 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 28 }}>
+          <Skeleton height={120} radius={12} />
+          <Skeleton height={120} radius={12} />
+        </div>
+        <Skeleton height={80} radius={12} style={{ marginTop: 16 }} />
+      </div>
+    );
   }
 
   if (!mappedData) {
@@ -905,7 +988,7 @@ function EventDashboard({ user, navigate }) {
         destination_votes: loggedInParticipant?.destination_votes || {}
       });
 
-    if (error) alert("Errore nel salvataggio: " + error.message);
+    if (error) toast.error("Errore nel salvataggio: " + error.message);
     else fetchEventDetails();
   };
 
@@ -933,7 +1016,7 @@ function EventDashboard({ user, navigate }) {
       })
       .eq("id", target.id);
 
-    if (error) alert("Errore nel salvataggio del profilo: " + error.message);
+    if (error) toast.error("Errore nel salvataggio del profilo: " + error.message);
     else fetchEventDetails();
   };
 
@@ -972,7 +1055,7 @@ function EventDashboard({ user, navigate }) {
         description: newProp.description,
         link: newProp.link
       });
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -987,7 +1070,7 @@ function EventDashboard({ user, navigate }) {
       .from("destination_proposals")
       .delete()
       .eq("id", propId);
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1012,7 +1095,7 @@ function EventDashboard({ user, navigate }) {
       .update({ destination_votes: updatedVotes })
       .eq("id", loggedInParticipant.id);
 
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1032,7 +1115,7 @@ function EventDashboard({ user, navigate }) {
         url: newRes.url,
         category: newRes.category
       });
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1047,7 +1130,7 @@ function EventDashboard({ user, navigate }) {
       .from("resources")
       .delete()
       .eq("id", resId);
-    if (error) alert(error.message);
+    if (error) toast.error(error.message);
     else fetchEventDetails();
   };
 
@@ -1076,9 +1159,10 @@ function EventDashboard({ user, navigate }) {
       .eq("id", id);
 
     if (error) {
-      alert("Errore nel fissare la data: " + error.message);
+      toast.error("Errore nel fissare la data: " + error.message);
     } else {
-      alert(`Data fissata con successo per il giorno ${formatDateIt(finalDate)}!`);
+      celebrate();
+      toast.success(`Data fissata: ${formatDateIt(finalDate)}!`, "Tutto pronto 🎉");
       fetchEventDetails();
       setDashboardStep("control");
     }
@@ -1132,6 +1216,7 @@ function EventDashboard({ user, navigate }) {
           eventCustomLocation={mappedData.event.customLocation}
           candidateDates={mappedData.event.selectedDates}
           participants={mappedData.participants}
+          geoVersion={geoVersion}
           activeParticipantName={editingParticipantName || defaultName}
           responses={mappedData.responsesMap}
           onSaveResponse={handleUpdateVotes}
@@ -1170,6 +1255,7 @@ function EventDashboard({ user, navigate }) {
           eventCustomLocation={mappedData.event.customLocation}
           candidateDates={mappedData.event.selectedDates}
           participants={mappedData.participants}
+          geoVersion={geoVersion}
           responses={mappedData.responsesMap}
           comments={mappedData.commentsList}
           bedsAvailable={mappedData.event.bedsAvailable}
@@ -1258,7 +1344,7 @@ function EventDashboard({ user, navigate }) {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(uniqueInviteLink);
-                alert("Link invito copiato!");
+                toast.success("Link invito copiato negli appunti!");
               }}
               className="btn btn-secondary"
               style={{ padding: "8px 14px", fontSize: "12px" }}
@@ -1400,62 +1486,55 @@ function EventDashboard({ user, navigate }) {
             {/* Colonna Destra: Carpooling & Destinazioni Collaborative */}
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               
-              {/* Carpooling */}
-              <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>🚗 Coordinamento Trasporti</h3>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "2px" }}>
-                    Dati di viaggio e disponibilità auto per il carpooling.
-                  </p>
-                </div>
+              {/* Carpooling — mostrato SOLO se qualcuno si sposta davvero in auto */}
+              {carpoolStats.relevant && (
+                <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>🚗 Carpooling</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "2px" }}>
+                      Chi va in auto e i posti per chi cerca un passaggio.
+                    </p>
+                  </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                  <div style={{ background: "var(--bg-inset)", padding: "10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
-                    <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--color-preferred)" }}>
-                      {carpoolStats.drivers.length}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div style={{ background: "var(--bg-inset)", padding: "10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
+                      <div style={{ fontSize: "18px", fontWeight: "800", color: "var(--color-preferred)" }}>{carpoolStats.drivers.length}</div>
+                      <div style={{ fontSize: "10px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>Auto disponibili</div>
                     </div>
-                    <div style={{ fontSize: "10px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                      Auto Disponibili
+                    <div style={{ background: "var(--bg-inset)", padding: "10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
+                      <div style={{ fontSize: "18px", fontWeight: "800", color: carpoolStats.enoughSeats ? "var(--color-available)" : "var(--color-veto)" }}>{carpoolStats.totalSeats}</div>
+                      <div style={{ fontSize: "10px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>Posti offerti</div>
                     </div>
                   </div>
-                  <div style={{ background: "var(--bg-inset)", padding: "10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
-                    <div style={{ fontSize: "18px", fontWeight: "800", color: carpoolStats.totalSeats >= carpoolStats.autoPassengers ? "var(--color-available)" : "var(--color-veto)" }}>
-                      {carpoolStats.totalSeats}
-                    </div>
-                    <div style={{ fontSize: "10px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                      Posti Auto Totali
-                    </div>
-                  </div>
-                </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
-                  {carpoolStats.drivers.length === 0 ? (
-                    <div style={{ padding: "8px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-veto)" }}>
-                      ⚠️ Nessuna auto offerta. Tutti viaggiano con mezzi pubblici o non hanno registrato l'auto.
-                    </div>
-                  ) : (
-                    <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+                    {carpoolStats.drivers.length > 0 && (
                       <ul style={{ paddingLeft: "14px", margin: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
                         {carpoolStats.drivers.map(d => (
-                          <li key={d.name}>
-                            🚗 <strong>{d.name}</strong> da {d.city}: mette a disposizione {d.carSeats} posti passeggeri.
-                          </li>
+                          <li key={d.name}>🚗 <strong>{d.name}</strong> da {d.city}: {d.carSeats > 0 ? `${d.carSeats} posti liberi` : "posti non indicati"}.</li>
                         ))}
                       </ul>
-                      
-                      {carpoolStats.totalSeats >= carpoolStats.autoPassengers ? (
-                        <div style={{ padding: "8px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-available)" }}>
-                          ✅ Posti auto sufficienti ({carpoolStats.totalSeats} posti per {carpoolStats.autoPassengers} passeggeri).
-                        </div>
-                      ) : (
-                        <div style={{ padding: "8px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-veto)" }}>
-                          ⚠️ Posti auto insufficienti (mancano {carpoolStats.autoPassengers - carpoolStats.totalSeats} posti).
-                        </div>
-                      )}
-                    </>
-                  )}
+                    )}
+                    {carpoolStats.ridersCount === 0 ? (
+                      <div style={{ padding: "8px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-available)" }}>
+                        ✅ Nessuno ha bisogno di un passaggio.
+                      </div>
+                    ) : carpoolStats.drivers.length === 0 ? (
+                      <div style={{ padding: "8px", background: "var(--color-maybe-bg)", border: "1px solid rgba(245, 158, 11, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-maybe)" }}>
+                        🤝 {carpoolStats.ridersCount} {carpoolStats.ridersCount === 1 ? "persona va" : "persone vanno"} in auto senza posto: organizzatevi per condividere un'auto.
+                      </div>
+                    ) : carpoolStats.enoughSeats ? (
+                      <div style={{ padding: "8px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-available)" }}>
+                        ✅ Posti sufficienti: {carpoolStats.totalSeats} per {carpoolStats.ridersCount} che cercano un passaggio.
+                      </div>
+                    ) : (
+                      <div style={{ padding: "8px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.15)", borderRadius: "var(--radius-sm)", color: "var(--color-veto)" }}>
+                        ⚠️ Posti insufficienti: mancano {carpoolStats.ridersCount - carpoolStats.totalSeats} posti.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Destinazione Collaborativa */}
               {mappedData.event.collaborativeDestination && (

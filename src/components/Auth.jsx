@@ -87,42 +87,19 @@ export default function Auth({ onAuthSuccess, redirectPath }) {
       if (!supabase.isMock && redirectPath) {
         localStorage.setItem("oauth_redirect_path", redirectPath);
       }
-
-      // Usiamo l'URL di base (origin + pathname) senza hash per evitare conflitti con HashRouter
-      const redirectUrl = supabase.isMock
-        ? window.location.origin + window.location.pathname + "#/login"
-        : window.location.origin + window.location.pathname;
-
+      // Senza hash per non confliggere con HashRouter; Supabase rimanda qui dopo Google
+      const redirectUrl = window.location.origin + window.location.pathname;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: redirectUrl
-        }
+        options: { redirectTo: redirectUrl },
       });
       if (error) {
         setErrorMsg(error.message);
         setLoading(false);
-        return;
       }
-
-      if (supabase.isMock) {
-        // In mock mode, signInWithOAuth ha già creato la sessione.
-        // I listener di auth verranno notificati con un micro-delay (50ms).
-        // Aspettiamo un attimo per lasciare che React processi lo state update,
-        // poi chiamiamo onAuthSuccess per feedback immediato.
-        setSuccessMsg("Accesso con Google riuscito! Caricamento...");
-        setTimeout(() => {
-          if (onAuthSuccess) onAuthSuccess();
-          setLoading(false);
-        }, 150);
-      } else {
-        // In modalità reale Supabase, signInWithOAuth causa un redirect alla pagina Google.
-        // Il browser naviga via da questa pagina, quindi questo codice non verrà mai raggiunto.
-        // Quando l'utente ritorna dall'OAuth, onAuthStateChange gestisce il login.
-        setLoading(false);
-      }
+      // In caso di successo il browser viene reindirizzato a Google: il codice qui non prosegue.
     } catch (err) {
-      setErrorMsg("Errore durante l'accesso Google: " + err.message);
+      setErrorMsg("Errore durante l'accesso con Google: " + err.message);
       setLoading(false);
     }
   };
@@ -201,7 +178,6 @@ export default function Auth({ onAuthSuccess, redirectPath }) {
         </button>
       </form>
 
-      {/* Login Social Google */}
       <div style={{ margin: "20px 0", display: "flex", alignItems: "center", gap: "10px" }}>
         <div style={{ flexGrow: 1, height: "1px", background: "var(--border-color)" }}></div>
         <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Oppure</span>

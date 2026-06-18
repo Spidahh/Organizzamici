@@ -1,66 +1,69 @@
 # 👥 Organizzamici
 
-Organizzamici è una web-app moderna ed elegante progettata per pianificare ritrovi, weekend, grigliate ed eventi di gruppo con facilità. Supporta la votazione delle date ideali (con calcolo dell'ottimalità algoritmica), la gestione di alloggi/posti letto, il coordinamento delle auto (carpooling), la bacheca risorse e la bacheca dei commenti in tempo reale.
+Organizzamici è una web-app per organizzare ritrovi, weekend, cene ed eventi di gruppo tra amici. Gli amici votano le date in tempo reale e un algoritmo intelligente trova il giorno migliore incrociando viaggi, impegni e turni di lavoro. Include carpooling, posti letto, destinazioni votabili dal gruppo, bacheca link e commenti.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici)
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
-
----
-
-## 🌟 Funzionalità Principali
-
-- **📅 Flusso Smart Data Fissa & Voto**:
-  - **Data Fissa**: Se l'evento ha una data stabilita, la procedura guidata salta lo Step 2 del calendario e mostra direttamente la dashboard consolidata con logistica, auto e alloggi.
-  - **Date da Votare**: Permette agli invitati di votare le date di disponibilità su una griglia interattiva.
-- **🎯 Algoritmo Ottimizzazione Date**: Calcola e ordina le date migliori per massimizzare la presenza del gruppo e trovare la soluzione ottimale.
-- **🔒 Finalizzazione Data**: L'organizzatore può fissare una data come definitiva direttamente dall'ottimizzatore, disabilitando la votazione e convertendo la dashboard in modalità data singola.
-- **🚗 Coordinamento Trasporti**: Sistema di carpooling integrato con calcolo posti auto e passeggeri.
-- **🛏️ Gestione Posti Letto**: Monitoraggio della disponibilità degli alloggi per pianificare weekend e vacanze di gruppo.
-- **💬 Bacheca dei Commenti & Risorse**: Posta commenti al volo direttamente dalla dashboard e condividi link e info utili.
-- **🔄 Google OAuth & Email Login**: Autenticazione integrata (con risoluzione dei conflitti di redirect su client-side routing).
-- **💾 Modalità Emulata Zero-Config**: Se non viene configurato un database Supabase, l'app funziona immediatamente in locale salvando tutti i dati in modo persistente tramite `localStorage`.
+**🔴 Live:** [spidahh.github.io/Organizzamici](https://spidahh.github.io/Organizzamici/)
 
 ---
 
-## 🚀 Deployment Rapido
+## ✨ Come funziona
 
-Puoi pubblicare l'applicazione gratuitamente in pochi secondi utilizzando uno dei seguenti bottoni:
+1. **Registrati / accedi** — con email e password (account gratuito, accesso immediato).
+2. **Crea l'evento** — tipo, luogo e date (fisse o da votare).
+3. **Condividi il link** — gli amici accedono e votano.
+4. **Pannello utente** — ritrovi che hai organizzato e quelli a cui ti sei unito, tutti in un posto.
 
-* **Vercel**: Clicca su [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) per importare il repository ed effettuare il deploy.
-* **Netlify**: Clicca su [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici) per avviare il deploy continuo da GitHub.
+Tutto (voti, commenti, carpooling, destinazioni, risorse) è **condiviso in tempo reale** tra tutti su database reale (Supabase).
 
 ---
 
-## 🛠️ Configurazione Supabase (Opzionale)
+## 🌟 Funzionalità
 
-Se desideri salvare i dati in un database reale condiviso con i tuoi amici anziché utilizzare il database emulato in locale, segui questi passaggi:
+- **🔑 Account** email/password con pannello dei propri eventi (creati e a cui si partecipa).
+- **📅 Data fissa o date da votare** con griglia interattiva.
+- **🎯 Algoritmo di ottimizzazione**: la data migliore pesando presenze, coesione del gruppo e sforzo di viaggio (tempi, ferie, posti letto).
+- **🔒 Finalizzazione data** dall'ottimizzatore.
+- **🚗 Carpooling** con calcolo posti auto/passeggeri.
+- **🛏️ Gestione posti letto**.
+- **🗺️ Destinazioni collaborative** votabili (❤️ / 👍 / 👎).
+- **💬 Bacheca commenti & risorse** in tempo reale.
+- **🎨 Tema a scelta** (Ambra / Lime / Teal) dall'header.
+- **💾 Modalità locale** (senza database, dati nel browser) per lo sviluppo.
+
+---
+
+## 🚀 Deployment
+
+Online su **GitHub Pages** (branch `gh-pages`). La build Vite usa `base: './'`, quindi gli stessi file girano anche su Vercel/Netlify o qualsiasi hosting statico.
+
+```bash
+npm run build          # genera dist/ (con le credenziali da .env)
+# poi pubblica il contenuto di dist/ sul branch gh-pages
+```
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSpidahh%2FOrganizzamici) [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Spidahh/Organizzamici)
+
+---
+
+## 🛠️ Configurazione database (Supabase)
+
+L'app live è già collegata a un progetto Supabase. Per usarne uno tuo:
 
 1. Crea un progetto gratuito su [Supabase](https://supabase.com/).
-2. Copia ed esegui il codice SQL presente nel file [`schema.sql`](file:///e:/PROGETTI/Organizzamici/schema.sql) nell'editor SQL (SQL Editor) di Supabase per creare le tabelle e impostare le policy RLS.
-3. Copia il file `.env.example` in `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-4. Configura le tue credenziali Supabase nel file `.env`:
+2. Esegui [`schema.sql`](schema.sql) nell'SQL Editor (tabelle, RLS, realtime e auto-conferma email per il login immediato).
+3. Copia `.env.example` in `.env` e inserisci le credenziali:
    ```env
    VITE_SUPABASE_URL=la_tua_supabase_url
    VITE_SUPABASE_ANON_KEY=la_tua_anon_key
    ```
-5. Su Supabase, abilita **Google** come Provider di Autenticazione sotto la sezione *Authentication -> Providers*. Aggiungi `https://<tuo-dominio-vercel-o-netlify>` come URL di redirect autorizzato.
+   (`.env` è ignorato da git; la anon key è pubblica e protetta dalle policy del database.)
 
 ---
 
-## 💻 Sviluppo Locale
+## 💻 Sviluppo locale
 
-1. Installa le dipendenze:
-   ```bash
-   npm install
-   ```
-2. Avvia il server di sviluppo locale:
-   ```bash
-   npm run dev
-   ```
-3. Avvia la build per produzione:
-   ```bash
-   npm run build
-   ```
+```bash
+npm install
+npm run dev
+npm run build
+```

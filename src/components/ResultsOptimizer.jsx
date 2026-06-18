@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
-import { optimizeDates } from "../utils/schedulerAlgorithm";
+import { optimizeDates, computeCarpool, getTravelAdvice } from "../utils/schedulerAlgorithm";
+import { toast, confirmDialog } from "../ui";
 
 export default function ResultsOptimizer({
   eventLocation,
@@ -22,7 +23,8 @@ export default function ResultsOptimizer({
   onAddResource,
   onDeleteResource,
   isOrganizer,
-  onFinalizeDate
+  onFinalizeDate,
+  geoVersion
 }) {
   const [resourceCategoryFilter, setResourceCategoryFilter] = useState("all");
   const [showAddResourceForm, setShowAddResourceForm] = useState(false);
@@ -31,26 +33,11 @@ export default function ResultsOptimizer({
   const [resDesc, setResDesc] = useState("");
   const [resCat, setResCat] = useState("altro");
 
-  // Calcola statistiche di carpooling
-  const carpoolStats = useMemo(() => {
-    let drivers = [];
-    let totalSeats = 0;
-    let autoPassengers = 0;
-    participants.forEach(p => {
-      if (p.hasCar) {
-        drivers.push(p);
-        totalSeats += (p.carSeats || 0);
-      } else if (p.transportMode === "auto") {
-        autoPassengers++;
-      }
-    });
-    return {
-      drivers,
-      totalSeats,
-      autoPassengers,
-      enoughSeats: totalSeats >= autoPassengers
-    };
-  }, [participants]);
+  // Carpooling: logica condivisa: l'auto conta solo se qualcuno si sposta davvero in auto
+  const carpoolStats = useMemo(
+    () => computeCarpool(participants, responses, selectedDate || candidateDates[0], eventLocation),
+    [participants, responses, selectedDate, candidateDates, eventLocation, geoVersion]
+  );
 
   // Graduatoria delle proposte di destinazione (Love = 3pt, Like = 1pt, No = -2pt)
   const rankedDestinations = useMemo(() => {
@@ -71,7 +58,7 @@ export default function ResultsOptimizer({
   // Esegue l'algoritmo di ottimizzazione su tutte le date candidate
   const optimizedList = useMemo(() => {
     return optimizeDates(eventLocation, candidateDates, participants, responses);
-  }, [eventLocation, candidateDates, participants, responses]);
+  }, [eventLocation, candidateDates, participants, responses, geoVersion]);
 
   // Confermati presenti / assenti / fatica per data singola fissa
   const confirmedPresent = useMemo(() => {
@@ -181,51 +168,7 @@ export default function ResultsOptimizer({
     return map;
   }, [optimizedList]);
 
-  // Consigli logistici per la partenza
-  const getTravelAdvice = (detailsObj, dateStr) => {
-    const time = detailsObj.travelTime;
-    const desc = detailsObj.travelDesc;
-    const restDays = detailsObj.restDays || [6, 0];
-    
-    // Controlla se il giorno dell'evento (dateStr) cade nei giorni di riposo di questo specifico invitato
-    const eventDayOfWeek = new Date(dateStr).getDay();
-    const isUserRestDay = restDays.includes(eventDayOfWeek);
-
-    if (time === 0) {
-      return "📍 Locale. Già sul posto. Nessun viaggio richiesto.";
-    }
-
-    if (desc.includes("aereo")) {
-      let base = `✈️ Volo aereo (~${time}h totali con controlli).`;
-      if (isUserRestDay) {
-        return `${base} Giorno di riposo per te: ideale partire la sera prima per evitare stanchezza.`;
-      } else {
-        return `${base} Giorno lavorativo: richiede 1.5 giorni di ferie per coprire andata e imbarco diurno.`;
-      }
-    }
-
-    if (desc.includes("Alta Velocità")) {
-      if (isUserRestDay) {
-        return `🚄 Treno Alta Velocità. Consigliato treno delle 08:30 (arrivo in ~${time}h). Sei a riposo: 0 ferie.`;
-      } else {
-        return `🚄 Treno Alta Velocità. È un tuo giorno lavorativo: consigliata partenza nel pomeriggio con mezza giornata di ferie.`;
-      }
-    }
-
-    if (time > 4.5) {
-      if (isUserRestDay) {
-        return `🚗 Viaggio in auto lungo (~${time}h). Essendo a riposo, consigliata partenza il pomeriggio prima per riposarsi.`;
-      } else {
-        return `🚗 Auto (~${time}h). È tuo giorno lavorativo: viaggio molto pesante, richiede 1-2 giorni di ferie.`;
-      }
-    } else {
-      if (isUserRestDay) {
-        return `🚗 Auto (~${time}h). Sei a riposo: partenza ore 09:00, arrivo per pranzo. Rientro il giorno successivo.`;
-      } else {
-        return `🚗 Auto (~${time}h). Lavori in questo giorno: richiede ferie pomeridiane per viaggiare in sicurezza.`;
-      }
-    }
-  };
+  // (getTravelAdvice è ora importato e condiviso: inquadra il consiglio sul mezzo reale)
 
   // Copia negli appunti o genera link di convocazione su WhatsApp per la data vincente
   const sendWhatsAppConvocazione = (dateStr) => {
@@ -410,11 +353,12 @@ export default function ResultsOptimizer({
 
               {/* Colonna Destra: Carpooling per la data fissa */}
               <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                {carpoolStats.relevant && (
                 <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
                   <div>
-                    <h2 style={{ marginBottom: "4px", fontWeight: "700" }}>🚗 Coordinamento Trasporti</h2>
+                    <h2 style={{ marginBottom: "4px", fontWeight: "700" }}>🚗 Carpooling</h2>
                     <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                      Dati di viaggio e disponibilità auto per il carpooling.
+                      Chi va in auto e i posti per chi cerca un passaggio.
                     </p>
                   </div>
 
@@ -424,50 +368,50 @@ export default function ResultsOptimizer({
                         {carpoolStats.drivers.length}
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                        Auto Disponibili
+                        Auto disponibili
                       </div>
                     </div>
                     <div style={{ background: "var(--bg-inset)", padding: "12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
-                      <div style={{ fontSize: "20px", fontWeight: "800", color: carpoolStats.totalSeats >= carpoolStats.autoPassengers ? "var(--color-available)" : "var(--color-veto)" }}>
+                      <div style={{ fontSize: "20px", fontWeight: "800", color: carpoolStats.enoughSeats ? "var(--color-available)" : "var(--color-veto)" }}>
                         {carpoolStats.totalSeats}
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                        Posti Auto Totali
+                        Posti offerti
                       </div>
                     </div>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-                    {carpoolStats.drivers.length === 0 ? (
-                      <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
-                        ⚠️ <strong>Nessuna auto offerta!</strong> Tutti i partecipanti viaggiano con mezzi pubblici o non hanno registrato una macchina.
+                    {carpoolStats.drivers.length > 0 && (
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <strong>Chi guida:</strong>
+                        <ul style={{ paddingLeft: "16px", marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
+                          {carpoolStats.drivers.map(d => (
+                            <li key={d.name}>🚗 <strong>{d.name}</strong> da {d.city}: {d.carSeats > 0 ? `${d.carSeats} posti liberi` : "posti non indicati"}.</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {carpoolStats.ridersCount === 0 ? (
+                      <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
+                        ✅ Nessuno ha bisogno di un passaggio in auto.
+                      </div>
+                    ) : carpoolStats.drivers.length === 0 ? (
+                      <div style={{ padding: "10px", background: "var(--color-maybe-bg)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-maybe)" }}>
+                        🤝 {carpoolStats.ridersCount} {carpoolStats.ridersCount === 1 ? "persona va" : "persone vanno"} in auto senza posto: organizzatevi per condividere un'auto.
+                      </div>
+                    ) : carpoolStats.enoughSeats ? (
+                      <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
+                        ✅ <strong>Posti sufficienti!</strong> {carpoolStats.totalSeats} posti per {carpoolStats.ridersCount} che cercano un passaggio.
                       </div>
                     ) : (
-                      <>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          <strong>Dettagli Auto dei Driver:</strong>
-                          <ul style={{ paddingLeft: "16px", marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
-                            {carpoolStats.drivers.map(d => (
-                              <li key={d.name}>
-                                🚗 <strong>{d.name}</strong> da {d.city}: mette a disposizione {d.carSeats} posti passeggeri.
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        
-                        {carpoolStats.totalSeats >= carpoolStats.autoPassengers ? (
-                          <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
-                            ✅ <strong>Posti auto sufficienti!</strong> Ci sono {carpoolStats.totalSeats} posti disponibili a fronte di {carpoolStats.autoPassengers} passeggeri.
-                          </div>
-                        ) : (
-                          <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
-                            ⚠️ <strong>Posti auto insufficienti!</strong> Mancano posti auto per {carpoolStats.autoPassengers - carpoolStats.totalSeats} passeggeri. Consigliato noleggiare o invitare altri drivers.
-                          </div>
-                        )}
-                      </>
+                      <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
+                        ⚠️ <strong>Posti insufficienti!</strong> Mancano {carpoolStats.ridersCount - carpoolStats.totalSeats} posti.
+                      </div>
                     )}
                   </div>
                 </div>
+                )}
               </div>
             </>
           ) : (
@@ -600,12 +544,13 @@ export default function ResultsOptimizer({
               {/* Colonna Destra: Heatmap Calendario + Dettaglio Risoluzione Logistica */}
               <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
-                {/* Pannello Carpooling & Logistica Auto */}
+                {/* Pannello Carpooling — solo se qualcuno va davvero in auto */}
+                {carpoolStats.relevant && (
                 <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "16px", textAlign: "left" }}>
                   <div>
-                    <h2 style={{ marginBottom: "4px", fontWeight: "700" }}>🚗 Coordinamento Trasporti</h2>
+                    <h2 style={{ marginBottom: "4px", fontWeight: "700" }}>🚗 Carpooling</h2>
                     <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                      Dati di viaggio e disponibilità auto per il carpooling.
+                      Chi va in auto e i posti per chi cerca un passaggio.
                     </p>
                   </div>
 
@@ -615,50 +560,50 @@ export default function ResultsOptimizer({
                         {carpoolStats.drivers.length}
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                        Auto Disponibili
+                        Auto disponibili
                       </div>
                     </div>
                     <div style={{ background: "var(--bg-inset)", padding: "12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)", textAlign: "center" }}>
-                      <div style={{ fontSize: "20px", fontWeight: "800", color: carpoolStats.totalSeats >= carpoolStats.autoPassengers ? "var(--color-available)" : "var(--color-veto)" }}>
+                      <div style={{ fontSize: "20px", fontWeight: "800", color: carpoolStats.enoughSeats ? "var(--color-available)" : "var(--color-veto)" }}>
                         {carpoolStats.totalSeats}
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase", marginTop: "2px" }}>
-                        Posti Auto Totali
+                        Posti offerti
                       </div>
                     </div>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-                    {carpoolStats.drivers.length === 0 ? (
-                      <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
-                        ⚠️ <strong>Nessuna auto offerta!</strong> Tutti i partecipanti viaggiano con mezzi pubblici o non hanno registrano una macchina.
+                    {carpoolStats.drivers.length > 0 && (
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <strong>Chi guida:</strong>
+                        <ul style={{ paddingLeft: "16px", marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
+                          {carpoolStats.drivers.map(d => (
+                            <li key={d.name}>🚗 <strong>{d.name}</strong> da {d.city}: {d.carSeats > 0 ? `${d.carSeats} posti liberi` : "posti non indicati"}.</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {carpoolStats.ridersCount === 0 ? (
+                      <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
+                        ✅ Nessuno ha bisogno di un passaggio in auto.
+                      </div>
+                    ) : carpoolStats.drivers.length === 0 ? (
+                      <div style={{ padding: "10px", background: "var(--color-maybe-bg)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-maybe)" }}>
+                        🤝 {carpoolStats.ridersCount} {carpoolStats.ridersCount === 1 ? "persona va" : "persone vanno"} in auto senza posto: organizzatevi per condividere un'auto.
+                      </div>
+                    ) : carpoolStats.enoughSeats ? (
+                      <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
+                        ✅ <strong>Posti sufficienti!</strong> {carpoolStats.totalSeats} posti per {carpoolStats.ridersCount} che cercano un passaggio.
                       </div>
                     ) : (
-                      <>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          <strong>Dettagli Auto dei Driver:</strong>
-                          <ul style={{ paddingLeft: "16px", marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
-                            {carpoolStats.drivers.map(d => (
-                              <li key={d.name}>
-                                🚗 <strong>{d.name}</strong> da {d.city}: mette a disposizione {d.carSeats} posti passeggeri.
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                        
-                        {carpoolStats.totalSeats >= carpoolStats.autoPassengers ? (
-                          <div style={{ padding: "10px", background: "var(--color-available-bg)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-available)" }}>
-                            ✅ <strong>Posti auto sufficienti!</strong> Ci sono {carpoolStats.totalSeats} posti disponibili a fronte di {carpoolStats.autoPassengers} passeggeri.
-                          </div>
-                        ) : (
-                          <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
-                            ⚠️ <strong>Posti auto insufficienti!</strong> Mancano posti auto per {carpoolStats.autoPassengers - carpoolStats.totalSeats} passeggeri. Consigliato noleggiare o invitare altri drivers.
-                          </div>
-                        )}
-                      </>
+                      <div style={{ padding: "10px", background: "var(--color-veto-bg)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--color-veto)" }}>
+                        ⚠️ <strong>Posti insufficienti!</strong> Mancano {carpoolStats.ridersCount - carpoolStats.totalSeats} posti.
+                      </div>
                     )}
                   </div>
                 </div>
+                )}
 
                 {/* Heatmap del Calendario */}
                 <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -812,10 +757,14 @@ export default function ResultsOptimizer({
                         </button>
                         {isOrganizer && !isSingleFixedDate && (
                           <button
-                            onClick={() => {
-                              if (window.confirm(`Sei sicuro di voler fissare definitivamente la data dell'evento per il giorno ${formatDateIt(selectedDetails.date)}? Questo disabiliterà il tabellone di voto e attiverà il riepilogo logistico finalizzato.`)) {
-                                onFinalizeDate(selectedDetails.date);
-                              }
+                            onClick={async () => {
+                              const ok = await confirmDialog({
+                                title: "Fissare la data?",
+                                message: `Sei sicuro di voler fissare definitivamente la data dell'evento per il giorno ${formatDateIt(selectedDetails.date)}? Questo disabiliterà il tabellone di voto e attiverà il riepilogo logistico finalizzato.`,
+                                confirmText: "Sì, fissa la data",
+                                danger: false,
+                              });
+                              if (ok) onFinalizeDate(selectedDetails.date);
                             }}
                             className="btn btn-secondary"
                             style={{ fontSize: "14px", width: "100%", background: "var(--color-available-bg)", color: "var(--color-available)", border: "1px solid rgba(16, 185, 129, 0.3)" }}
@@ -903,18 +852,27 @@ export default function ResultsOptimizer({
                       </h3>
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         {selectedDetails.details.map((d) => {
+                          const pending = !d.hasVoted || d.preference === null || d.preference === undefined;
                           let prefLabel = "Impossibile (Veto)";
                           let bgStyle = { background: "var(--color-veto-bg)", color: "var(--color-veto)", border: "1px solid rgba(239, 68, 68, 0.2)" };
-                          
-                          if (d.preference === 5) {
+                          let borderColor = "var(--color-veto)";
+
+                          if (pending) {
+                            prefLabel = "⏳ In attesa";
+                            bgStyle = { background: "var(--color-pending-bg)", color: "var(--color-pending)", border: "1px solid var(--border-color)" };
+                            borderColor = "var(--text-muted)";
+                          } else if (d.preference === 5) {
                             prefLabel = "Sì, alla grande!";
-                            bgStyle = { background: "var(--color-preferred-bg)", color: "var(--color-preferred)", border: "1px solid rgba(37, 99, 235, 0.2)" };
+                            bgStyle = { background: "var(--color-preferred-bg)", color: "var(--color-preferred)", border: "1px solid rgba(56, 189, 248, 0.2)" };
+                            borderColor = "var(--color-preferred)";
                           } else if (d.preference === 3) {
                             prefLabel = "Ok, ci sono";
                             bgStyle = { background: "var(--color-available-bg)", color: "var(--color-available)", border: "1px solid rgba(16, 185, 129, 0.2)" };
+                            borderColor = "var(--color-available)";
                           } else if (d.preference === 1) {
                             prefLabel = "Con fatica";
                             bgStyle = { background: "var(--color-maybe-bg)", color: "var(--color-maybe)", border: "1px solid rgba(217, 119, 6, 0.2)" };
+                            borderColor = "var(--color-maybe)";
                           }
 
                           return (
@@ -922,17 +880,12 @@ export default function ResultsOptimizer({
                               key={d.name}
                               style={{
                                 display: "flex",
-                                justifySpaceBetween: "space-between",
+                                justifyContent: "space-between",
                                 alignItems: "center",
                                 padding: "8px 12px",
                                 background: "var(--bg-inset)",
                                 borderRadius: "var(--radius-sm)",
-                                borderLeft: `3px solid ${
-                                  d.preference === 5 ? "var(--color-preferred)" : 
-                                  d.preference === 3 ? "var(--color-available)" : 
-                                  d.preference === 1 ? "var(--color-maybe)" : 
-                                  "var(--color-veto)"
-                                }`
+                                borderLeft: `3px solid ${borderColor}`
                               }}
                             >
                               <span style={{ fontSize: "14px", fontWeight: "600" }}>{d.name}</span>
@@ -976,7 +929,7 @@ export default function ResultsOptimizer({
             onSubmit={(e) => {
               e.preventDefault();
               if (!resTitle.trim() || !resUrl.trim()) {
-                alert("Titolo e URL sono obbligatori!");
+                toast.error("Titolo e URL sono obbligatori!");
                 return;
               }
               let formattedUrl = resUrl.trim();

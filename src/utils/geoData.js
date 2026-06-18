@@ -51,31 +51,78 @@ export function getHaversineDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// ---- Geocoding: cache coordinate per QUALSIASI città del mondo ----
+// Seed dal database locale, poi esteso via OpenStreetMap (Nominatim) e
+// persistito in localStorage. Così non c'è più un elenco fisso di città.
+const COORD_CACHE = {};
+for (const [name, c] of Object.entries(CITIES)) {
+  COORD_CACHE[name.trim().toLowerCase()] = { lat: c.lat, lon: c.lon, country: c.country };
+}
+try {
+  const saved = JSON.parse(localStorage.getItem("oa_geo_cache") || "{}");
+  Object.assign(COORD_CACHE, saved);
+} catch { /* no-op */ }
+
+// Coordinate sincrone se già note (DB locale o cache), altrimenti null
+export function getCoords(name) {
+  if (!name) return null;
+  return COORD_CACHE[name.trim().toLowerCase()] || null;
+}
+
+const _inflight = {};
+// Risolve una città qualsiasi in coordinate (async) e la mette in cache
+export async function geocodeCity(name) {
+  if (!name || !name.trim()) return null;
+  const key = name.trim().toLowerCase();
+  if (COORD_CACHE[key]) return COORD_CACHE[key];
+  if (_inflight[key]) return _inflight[key];
+  _inflight[key] = (async () => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1&addressdetails=1`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const data = await res.json();
+      if (data && data[0]) {
+        const coords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), country: data[0].address?.country || "" };
+        COORD_CACHE[key] = coords;
+        try {
+          const saved = JSON.parse(localStorage.getItem("oa_geo_cache") || "{}");
+          saved[key] = coords;
+          localStorage.setItem("oa_geo_cache", JSON.stringify(saved));
+        } catch { /* no-op */ }
+        return coords;
+      }
+    } catch { /* no-op */ }
+    return null;
+  })();
+  const r = await _inflight[key];
+  delete _inflight[key];
+  return r;
+}
+
 // Stima il tempo di viaggio (in ore) e fornisce una descrizione
 export function estimateTravelTime(fromCity, toCity, mode = "auto") {
-  if (fromCity === toCity) {
+  if (fromCity && toCity && fromCity.trim().toLowerCase() === toCity.trim().toLowerCase()) {
     return { time: 0, distance: 0, desc: "Già sul posto (0 km)" };
   }
 
-  const start = CITIES[fromCity];
-  const end = CITIES[toCity];
+  const start = getCoords(fromCity);
+  const end = getCoords(toCity);
 
   if (!start || !end) {
-    // Ritorna valori generici se le città non sono inserite nel database
+    // Coordinate non ancora risolte: stima generica (verrà aggiornata dopo il geocoding)
     return { time: 3.5, distance: 300, desc: "Viaggio stimato: ~3.5 ore" };
   }
 
   const distance = getHaversineDistance(start.lat, start.lon, end.lat, end.lon);
-  
+
   // Moltiplicatore stradale/ferroviario per approssimare il percorso effettivo
-  const roadDistance = distance * 1.22; 
+  const roadDistance = distance * 1.22;
 
   let time = 0;
   let desc = "";
 
-  // Se è un viaggio transoceanico o molto lungo (> 700km in linea d'aria) e non è specificata l'auto,
-  // la scelta ottimale è l'aereo
-  const forceFlight = distance > 700 || start.country !== end.country || start.country === "USA" || end.country === "USA";
+  // Viaggi molto lunghi (> 700km in linea d'aria): l'aereo è la scelta ottimale
+  const forceFlight = distance > 700;
   const actualMode = forceFlight ? "aereo" : mode;
 
   switch (actualMode) {

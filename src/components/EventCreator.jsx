@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { CITIES } from "../utils/geoData";
+import { toast } from "../ui";
 
 export default function EventCreator({ step, initialData, onNext, onPrev }) {
   const [eventType, setEventType] = useState(initialData?.eventType || "weekend");
@@ -8,13 +9,9 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
     initialData?.collaborativeDestination || false
   );
 
-  const [title, setTitle] = useState(initialData?.title || "Ritrovo Amici");
-  const [description, setDescription] = useState(
-    initialData?.description || "Inserisci qui le note o il programma dell'evento!"
-  );
-  const [customLocation, setCustomLocation] = useState(
-    initialData?.customLocation || "Villa La Novellina (Chianti)"
-  );
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [customLocation, setCustomLocation] = useState(initialData?.customLocation || "");
   const [location, setLocation] = useState(initialData?.location || "Firenze");
   const [bedsAvailable, setBedsAvailable] = useState(initialData?.bedsAvailable || 4);
   
@@ -78,11 +75,10 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
 
   const handleNextStep = (e) => {
     e.preventDefault();
-    console.log("SUBMITTING EVENT CREATOR: step=" + step + ", dateMode=" + dateMode + ", fixedDate=" + fixedDate + ", selectedDates=" + JSON.stringify(selectedDates));
     if (step === 1) {
       if (dateMode === "fissa") {
         if (!fixedDate) {
-          alert("Seleziona la data dell'evento!");
+          toast.error("Seleziona la data dell'evento!");
           return;
         }
         onNext({ 
@@ -111,7 +107,7 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
       }
     } else if (step === 2) {
       if (selectedDates.length === 0) {
-        alert("Seleziona almeno una data sul calendario!");
+        toast.error("Seleziona almeno una data sul calendario!");
         return;
       }
       onNext({ selectedDates, participants: initialData?.participants || [] });
@@ -223,12 +219,21 @@ export default function EventCreator({ step, initialData, onNext, onPrev }) {
           </div>
 
           <div className="form-group">
-            <label>Città di Riferimento Logistico</label>
-            <select value={location} onChange={(e) => setLocation(e.target.value)}>
-              {Object.keys(CITIES).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <label>Città del ritrovo (per calcolare i viaggi)</label>
+            <input
+              list="oa-city-list"
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Scrivi una città qualsiasi (es. Matera, Lisbona, Berlino...)"
+              required
+            />
+            <datalist id="oa-city-list">
+              {Object.keys(CITIES).map((c) => (<option key={c} value={c} />))}
+            </datalist>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              Funziona con qualunque città del mondo: serve a stimare distanze e tempi di viaggio.
+            </span>
           </div>
 
           {(eventType === "viaggio" || eventType === "altro") && (

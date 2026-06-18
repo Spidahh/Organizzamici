@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { estimateTravelTime, CITIES } from "../utils/geoData";
+import { estimateTravelTime, CITIES, geocodeCity } from "../utils/geoData";
+import { toast } from "../ui";
 
 export default function AvailabilitySelector({
   eventLocation,
@@ -24,7 +25,8 @@ export default function AvailabilitySelector({
   onDeleteDestinationProposal,
   resources = [],
   onAddResource,
-  onDeleteResource
+  onDeleteResource,
+  geoVersion
 }) {
   const [resourceCategoryFilter, setResourceCategoryFilter] = useState("all");
   const [showAddResourceForm, setShowAddResourceForm] = useState(false);
@@ -43,6 +45,16 @@ export default function AvailabilitySelector({
   const [tempRestDays, setTempRestDays] = useState([6, 0]);
   const [tempHasCar, setTempHasCar] = useState(false);
   const [tempCarSeats, setTempCarSeats] = useState(0);
+
+  const [, setGeoTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!tempCity || !tempCity.trim()) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      geocodeCity(tempCity).then((coords) => { if (!cancelled && coords) setGeoTick((x) => x + 1); });
+    }, 700);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [tempCity]);
 
   // Se restDays è composto da sabato (6) e domenica (0), allora ha il weekend libero
   const isStandardWeekendLibero = (days) => {
@@ -133,7 +145,7 @@ export default function AvailabilitySelector({
         hasCar: tempHasCar,
         carSeats: tempHasCar ? tempCarSeats : 0
       });
-      alert("Opzioni viaggio e lavoro salvate!");
+      toast.success("Opzioni viaggio e lavoro salvate!");
     }
   };
 
@@ -159,13 +171,13 @@ export default function AvailabilitySelector({
     if (isNewRegistration) {
       const trimmedName = regName.trim();
       if (!trimmedName) {
-        alert("Inserisci il tuo nome per registrarti!");
+        toast.error("Inserisci il tuo nome per registrarti!");
         return;
       }
       
       const nameExists = participants.some(p => p.name.toLowerCase() === trimmedName.toLowerCase());
       if (nameExists) {
-        alert(`Il nome "${trimmedName}" è già registrato nel tabellone. Per favore usa un nome o soprannome diverso.`);
+        toast.error(`Il nome "${trimmedName}" è già registrato nel tabellone. Per favore usa un nome o soprannome diverso.`);
         return;
       }
       
@@ -223,11 +235,17 @@ export default function AvailabilitySelector({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label style={{ fontSize: "10px" }}>Da dove parti?</label>
-                <select value={tempCity} onChange={(e) => setTempCity(e.target.value)} style={{ padding: "6px 10px", fontSize: "13px" }}>
-                  {Object.keys(CITIES).map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <>
+                  <input
+                    list="oa-city-dl-1"
+                    type="text"
+                    value={tempCity}
+                    onChange={(e) => setTempCity(e.target.value)}
+                    placeholder="Scrivi una città qualsiasi (es. Matera, Lisbona...)"
+                    style={{ padding: "6px 10px", fontSize: "13px" }}
+                  />
+                  <datalist id="oa-city-dl-1">{Object.keys(CITIES).map((c) => (<option key={c} value={c} />))}</datalist>
+                </>
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -368,11 +386,17 @@ export default function AvailabilitySelector({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ fontSize: "10px" }}>Partenza</label>
-                  <select value={tempCity} onChange={(e) => setTempCity(e.target.value)} style={{ padding: "6px 10px", fontSize: "13px" }}>
-                    {Object.keys(CITIES).map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                  <>
+                    <input
+                      list="oa-city-dl-2"
+                      type="text"
+                      value={tempCity}
+                      onChange={(e) => setTempCity(e.target.value)}
+                      placeholder="Scrivi una città qualsiasi (es. Matera, Lisbona...)"
+                      style={{ padding: "6px 10px", fontSize: "13px" }}
+                    />
+                    <datalist id="oa-city-dl-2">{Object.keys(CITIES).map((c) => (<option key={c} value={c} />))}</datalist>
+                  </>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -554,7 +578,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "love" ? "" : "love");
@@ -575,7 +599,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "like" ? "" : "like");
@@ -596,7 +620,7 @@ export default function AvailabilitySelector({
                         type="button"
                         onClick={() => {
                           if (isNewRegistration) {
-                            alert("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
+                            toast.info("Completa prima la registrazione inserendo il tuo nome in alto per salvare i voti della destinazione!");
                             return;
                           }
                           onVoteDestination(prop.id, activeParticipantName, myVote === "no" ? "" : "no");
@@ -654,7 +678,7 @@ export default function AvailabilitySelector({
                   const linkEl = document.getElementById("new-dest-link");
                   
                   if (!nameEl.value.trim()) {
-                    alert("Inserisci almeno il nome della proposta!");
+                    toast.error("Inserisci almeno il nome della proposta!");
                     return;
                   }
                   
@@ -885,7 +909,7 @@ export default function AvailabilitySelector({
             onSubmit={(e) => {
               e.preventDefault();
               if (!resTitle.trim() || !resUrl.trim()) {
-                alert("Titolo e URL sono obbligatori!");
+                toast.error("Titolo e URL sono obbligatori!");
                 return;
               }
               let formattedUrl = resUrl.trim();
